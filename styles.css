@@ -16,7 +16,7 @@ html, body { margin: 0; height: 100%; }
 html { background: var(--paper); transition: background-color 600ms ease; }
 body {
   font-family: var(--font);
-  background: var(--paper);
+  background: transparent;
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
@@ -368,10 +368,12 @@ input { user-select: text; -webkit-user-select: text; }
   .type .t-name { font-size: 2rem; }
 }
 
-/* Installed on iOS, fixed screens can stop above the home bar. Size them to the
-   full screen there so the colour runs edge to edge under the home indicator. */
+/* Installed on iOS, fixed screens can stop above the home bar, so size them to the
+   full screen there. iOS only: on Android that sizing stops short of the gesture bar. */
 @media (display-mode: standalone) {
-  .setup, .row, .done { bottom: auto; height: 100vh; }
+  @supports (-webkit-touch-callout: none) {
+    .setup, .row, .done { bottom: auto; height: 100vh; }
+  }
 }
 
 /* History */

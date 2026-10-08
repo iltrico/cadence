@@ -180,7 +180,7 @@ function show(id) {
   ['setup', 'row', 'done'].forEach((s) => { $(s).hidden = s !== id; });
   const meta = document.querySelector('meta[name="theme-color"]');
   meta.content = id === 'row' && run ? KIND[run.segs[run.idx]?.kind || 'warm'].bg : '#F4F6FB';
-  if (id !== 'row') document.documentElement.style.backgroundColor = '';
+  document.documentElement.style.backgroundColor = id === 'row' && run ? KIND[run.segs[run.idx]?.kind || 'warm'].bg : '';
   window.scrollTo(0, 0);
 }
 
