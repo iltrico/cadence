@@ -20,7 +20,7 @@
 
 <!-- Setup -->
 <main id="setup" class="screen setup">
-  <header class="bar"><h1 class="wordmark">Cadence</h1></header>
+  <header class="bar"><h1 class="wordmark">Cadence</h1><button type="button" id="historyBtn" class="pill">History</button></header>
 
   <div id="types" class="types" role="radiogroup" aria-label="Session"></div>
   <div id="dots" class="dots" aria-hidden="true"></div>
@@ -71,7 +71,6 @@
 
   <div class="cue" aria-hidden="true">
     <div class="rail"><div id="fill" class="rail-fill"></div><div id="puck" class="puck"></div></div>
-    <p class="phase"><span id="phase">Drive</span></p>
   </div>
 
   <div id="centre" class="centre">
@@ -128,8 +127,25 @@
     <div><dt>Intervals</dt><dd id="dCount"></dd></div>
     <div><dt>Hard work</dt><dd id="dHard"></dd></div>
   </dl>
-  <button type="button" id="again" class="start">New session</button>
+  <div class="done-actions">
+    <button type="button" id="again" class="start">New session</button>
+    <button type="button" id="doneHistory" class="ghost">History</button>
+  </div>
 </main>
+
+<div id="histSheet" class="sheet" hidden>
+  <div class="sheet-card plan-card hist-card">
+    <div class="sheet-head">
+      <div><p class="sheet-title">History</p><p id="histMeta" class="hist-meta"></p></div>
+      <button type="button" id="histClose" class="x" aria-label="Close">×</button>
+    </div>
+    <ol id="histList" class="hist"></ol>
+    <div class="hist-actions">
+      <button type="button" id="exportCsv" class="start">Export CSV</button>
+      <button type="button" id="exportJson" class="ghost">JSON</button>
+    </div>
+  </div>
+</div>
 
 <script type="module" src="./app.js"></script>
 </body>

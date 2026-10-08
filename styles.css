@@ -10,11 +10,10 @@
   --fg: #231300;
   --font: 'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   box-sizing: border-box;
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 *, *::before, *::after { box-sizing: inherit; }
 html, body { margin: 0; height: 100%; }
+html { background: var(--paper); transition: background-color 600ms ease; }
 body {
   font-family: var(--font);
   background: var(--paper);
@@ -42,7 +41,8 @@ input { user-select: text; -webkit-user-select: text; }
   gap: 1rem;
   max-width: 34rem; margin: 0 auto;
 }
-.bar { display: flex; align-items: center; height: 2.25rem; }
+.bar { display: flex; align-items: center; justify-content: space-between; height: 2.25rem; }
+.pill { border: 0; background: #E3E7F0; border-radius: 999px; padding: 0.5rem 1rem; font-weight: 700; }
 .wordmark { margin: 0; font-size: 1.5rem; font-weight: 800; font-stretch: 75%; letter-spacing: -0.02em; }
 
 .types {
@@ -183,8 +183,9 @@ input { user-select: text; -webkit-user-select: text; }
   background: color-mix(in srgb, var(--fg) 16%, transparent);
 }
 .rail-fill {
-  position: absolute; left: 1.75rem; top: 0; bottom: 0;
-  width: calc(var(--x) * (100% - 3.5rem));
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: calc(var(--x) * (100% - 3.5rem) + 3.5rem);
+  border-radius: 999px;
   background: var(--fg);
 }
 .puck {
@@ -196,7 +197,6 @@ input { user-select: text; -webkit-user-select: text; }
   border: 0.45rem solid var(--fg);
   transition: background-color 600ms ease;
 }
-.phase { margin: 0.75rem 0 0; font-weight: 700; font-size: 1.1rem; }
 
 .centre { position: relative; display: grid; align-items: center; min-height: 0; }
 .clock, .countdown { grid-area: 1 / 1; }
@@ -339,8 +339,7 @@ input { user-select: text; -webkit-user-select: text; }
   .seg-name { font-size: clamp(1.75rem, 6vw, 3rem); }
   .rate span { font-size: clamp(2rem, 7vw, 3.5rem); }
   .rail { height: 2rem; }
-  .phase { margin-top: 0.4rem; }
-  .stats dd { font-size: 1.3rem; }
+    .stats dd { font-size: 1.3rem; }
   .seg-left { font-size: clamp(5rem, 18vw, 11rem); }
   .ctl { padding: 0.6rem 0.5rem; }
 }
@@ -368,3 +367,27 @@ input { user-select: text; -webkit-user-select: text; }
   .start { grid-column: 2; grid-row: 4; padding: 0.8rem; }
   .type .t-name { font-size: 2rem; }
 }
+
+/* Installed on iOS, fixed screens can stop above the home bar. Size them to the
+   full screen there so the colour runs edge to edge under the home indicator. */
+@media (display-mode: standalone) {
+  .setup, .row, .done { bottom: auto; height: 100vh; }
+}
+
+/* History */
+.hist-card { grid-template-rows: auto minmax(0, 1fr) auto; }
+.hist-meta { margin: 0.2rem 0 0; color: var(--muted); font-weight: 600; }
+.hist { list-style: none; margin: 0; padding: 0; overflow-y: auto; min-height: 0; }
+.hist li { display: grid; grid-template-columns: 0.7rem minmax(0, 1fr) auto auto; align-items: center; gap: 0.75rem; padding: 0.6rem 0; border-bottom: 1px solid var(--line); }
+.hist li:last-child { border-bottom: 0; }
+.h-dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; }
+.h-main { display: grid; min-width: 0; }
+.h-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.h-sub { color: var(--muted); font-size: 0.9rem; }
+.h-dur { font-weight: 800; font-stretch: 85%; font-size: 1.2rem; }
+.h-del { min-width: 2.25rem; height: 2.25rem; border: 0; border-radius: 999px; background: none; color: var(--muted); font-size: 1.25rem; font-weight: 700; }
+.h-del.arm { background: #D7263D; color: #fff; font-size: 0.9rem; padding: 0 0.8rem; }
+.hist-actions { display: grid; grid-template-columns: 1fr auto; gap: 0.75rem; }
+.hist-actions .ghost { padding: 1rem 1.4rem; }
+.start:disabled, .ghost:disabled { opacity: 0.35; }
+.done-actions { display: grid; gap: 0.75rem; }

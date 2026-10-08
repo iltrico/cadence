@@ -180,6 +180,7 @@ function show(id) {
   ['setup', 'row', 'done'].forEach((s) => { $(s).hidden = s !== id; });
   const meta = document.querySelector('meta[name="theme-color"]');
   meta.content = id === 'row' && run ? KIND[run.segs[run.idx]?.kind || 'warm'].bg : '#F4F6FB';
+  if (id !== 'row') document.documentElement.style.backgroundColor = '';
   window.scrollTo(0, 0);
 }
 
@@ -215,7 +216,9 @@ function startRun() {
   const segs = plan.map((s) => ({ ...s }));
   const starts = []; let acc = 0;
   segs.forEach((s) => { starts.push(acc); acc += s.dur; });
-  run = { segs, starts, total: acc, elapsed: 0, last: performance.now(), paused: false, phase: 0, idx: -1, txt: {}, cd: false, goUntil: 0 };
+  run = { segs, starts, total: acc, elapsed: 0, last: performance.now(), paused: false, phase: 0, idx: -1, txt: {}, cd: false, goUntil: 0,
+    rowedBy: segs.map(() => 0), startedAt: new Date().toISOString(), type: state.type, mode: state.mode,
+    target: state.mode === 'time' ? `${state.minutes} min` : `${state.meters} m` };
   $('ticks').innerHTML = starts.slice(1).map((t) => `<span style="left:${(t / acc) * 100}%"></span>`).join('');
   $('pause').textContent = 'Pause';
   $('centre').classList.remove('cd');
@@ -241,6 +244,7 @@ function enterSeg(i) {
   row.style.setProperty('--bg', k.bg);
   row.style.setProperty('--fg', k.ink);
   document.querySelector('meta[name="theme-color"]').content = k.bg;
+  document.documentElement.style.backgroundColor = k.bg;
   $('segName').textContent = s.name;
   $('spm').textContent = s.spm;
   $('rep').textContent = s.rep ? `${s.rep} of ${s.of}` : '\u00a0';
@@ -263,6 +267,7 @@ function tick(now) {
   run.last = now;
   const seg = run.segs[Math.max(0, run.idx)];
   if (!run.paused) {
+    if (run.idx >= 0) run.rowedBy[run.idx] += Math.min(wall, run.total - run.elapsed);
     run.elapsed += wall;
     run.phase = (run.phase + dt * (seg?.spm || 20) / 60) % 1;
   }
@@ -279,7 +284,6 @@ function tick(now) {
   const drive = p < d;
   const x = drive ? ease(p / d) : 1 - ease((p - d) / (1 - d));
   $('row').style.setProperty('--x', x.toFixed(4));
-  setText('phase', drive ? 'Drive' : 'Recover');
 
   // Metrics
   setText('segLeft', fmt(Math.ceil(rem)));
@@ -345,20 +349,132 @@ function setPaused(p) {
 function finish(completed) {
   cancelAnimationFrame(raf);
   dropWake();
-  const rowed = Math.min(run.elapsed, run.total);
-  const done = run.segs.filter((_, i) => run.starts[i] < rowed);
-  const hard = run.segs.reduce((a, s, i) => {
-    if (s.spm < 24) return a;
-    return a + Math.max(0, Math.min(s.dur, rowed - run.starts[i]));
-  }, 0);
-  $('dTime').textContent = fmt(rowed);
-  $('dCount').textContent = `${completed ? run.segs.length : done.length} of ${run.segs.length}`;
-  $('dHard').textContent = fmt(hard);
+  const rec = sessionRecord(run, completed);
+  if (rec.rowed >= 60) saveSession(rec);
+  $('dTime').textContent = fmt(rec.rowed);
+  $('dCount').textContent = `${rec.intervalsDone} of ${rec.intervals}`;
+  $('dHard').textContent = fmt(rec.hard);
   $('endSheet').hidden = true;
   $('pausedSheet').hidden = true;
   run = null;
   show('done');
 }
+
+// ---------- History ----------
+const HISTORY_KEY = 'cadence-history';
+
+function sessionRecord(r, completed) {
+  const segments = r.segs.map((sg, i) => ({
+    name: sg.name, kind: sg.kind, spm: sg.spm, planned: sg.dur, rowed: Math.round(r.rowedBy[i]),
+  }));
+  const rowed = segments.reduce((a, x) => a + x.rowed, 0);
+  const t = TYPES.find((x) => x.id === r.type);
+  return {
+    id: r.startedAt,
+    startedAt: r.startedAt,
+    type: r.type,
+    session: t ? t.name : r.type,
+    target: r.target,
+    completed,
+    planned: r.total,
+    rowed,
+    intervals: segments.length,
+    intervalsDone: segments.filter((x) => x.rowed >= Math.min(x.planned, 5)).length,
+    hard: segments.filter((x) => x.spm >= 24).reduce((a, x) => a + x.rowed, 0),
+    strokes: Math.round(segments.reduce((a, x) => a + (x.rowed * x.spm) / 60, 0)),
+    segments,
+  };
+}
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
+}
+function storeHistory(list) {
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); return true; } catch { return false; }
+}
+function saveSession(rec) {
+  const list = loadHistory();
+  list.unshift(rec);
+  storeHistory(list);
+  // Ask the browser not to evict saved sessions under storage pressure.
+  try { navigator.storage?.persist?.(); } catch {}
+}
+
+const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+const timeFmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
+
+function renderHistory() {
+  const list = loadHistory();
+  const total = list.reduce((a, x) => a + x.rowed, 0);
+  $('histMeta').textContent = list.length
+    ? `${list.length} ${list.length === 1 ? 'session' : 'sessions'}, ${fmt(total)} rowed`
+    : 'No sessions yet';
+  $('histList').innerHTML = list.map((x) => {
+    const d = new Date(x.startedAt);
+    const color = KIND[(TYPES.find((t) => t.id === x.type) || { kind: 'steady' }).kind].bg;
+    return `<li>
+      <span class="h-dot" style="background:${color}"></span>
+      <span class="h-main"><span class="h-name">${x.session}</span>
+        <span class="h-sub">${dayFmt.format(d)}, ${timeFmt.format(d)}${x.completed ? '' : ', ended early'}</span></span>
+      <span class="h-dur">${fmt(x.rowed)}</span>
+      <button type="button" class="h-del" data-id="${x.id}" aria-label="Delete session">×</button>
+    </li>`;
+  }).join('');
+  $('exportCsv').disabled = $('exportJson').disabled = !list.length;
+}
+
+const csvCell = (v) => {
+  const t = String(v ?? '');
+  return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+};
+
+function historyCsv(list) {
+  const head = ['date', 'start_time', 'session', 'target', 'completed', 'planned_min', 'rowed_min',
+    'intervals_done', 'intervals', 'hard_min', 'avg_target_spm', 'est_strokes'];
+  const min = (sec) => (sec / 60).toFixed(2);
+  const rows = list.map((x) => {
+    const d = new Date(x.startedAt);
+    const avg = x.rowed ? (x.strokes * 60 / x.rowed).toFixed(1) : '';
+    return [
+      d.toISOString().slice(0, 10), d.toTimeString().slice(0, 5), x.session, x.target,
+      x.completed ? 'yes' : 'no', min(x.planned), min(x.rowed),
+      x.intervalsDone, x.intervals, min(x.hard), avg, x.strokes,
+    ];
+  });
+  return [head, ...rows].map((r) => r.map(csvCell).join(',')).join('\n');
+}
+
+async function exportFile(name, type, text) {
+  const file = new File([text], name, { type });
+  try {
+    if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: name }); return; }
+  } catch (e) { if (e?.name === 'AbortError') return; }
+  const url = URL.createObjectURL(file);
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+const stamp = () => new Date().toISOString().slice(0, 10);
+$('exportCsv').addEventListener('click', () => exportFile(`cadence-${stamp()}.csv`, 'text/csv', historyCsv(loadHistory())));
+$('exportJson').addEventListener('click', () => exportFile(`cadence-${stamp()}.json`, 'application/json', JSON.stringify(loadHistory(), null, 2)));
+
+$('histList').addEventListener('click', (e) => {
+  const b = e.target.closest('.h-del'); if (!b) return;
+  if (b.dataset.confirm !== '1') {
+    b.dataset.confirm = '1'; b.textContent = 'Delete'; b.classList.add('arm');
+    setTimeout(() => { if (b.isConnected) { b.dataset.confirm = ''; b.textContent = '×'; b.classList.remove('arm'); } }, 2500);
+    return;
+  }
+  storeHistory(loadHistory().filter((x) => x.id !== b.dataset.id));
+  renderHistory();
+});
+
+const openHistory = () => { renderHistory(); $('histSheet').hidden = false; };
+$('historyBtn').addEventListener('click', openHistory);
+$('doneHistory').addEventListener('click', openHistory);
+$('histClose').addEventListener('click', () => { $('histSheet').hidden = true; });
+$('histSheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.hidden = true; });
 
 $('start').addEventListener('click', startRun);
 $('pause').addEventListener('click', () => setPaused(!run.paused));
