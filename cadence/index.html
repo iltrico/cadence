@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Cadence</title>
+  <meta name="description" content="Rowing machine sessions paced the way a coach would plan them.">
+  <meta name="theme-color" content="#F4F6FB">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,300..800&display=swap">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<!-- Setup -->
+<main id="setup" class="screen setup">
+  <header class="bar"><h1 class="wordmark">Cadence</h1></header>
+
+  <div id="types" class="types" role="radiogroup" aria-label="Session"></div>
+  <div id="dots" class="dots" aria-hidden="true"></div>
+
+  <section class="length" aria-label="Length">
+    <div class="toggle" role="radiogroup" aria-label="Set length by">
+      <button type="button" role="radio" data-mode="time">Time</button>
+      <button type="button" role="radio" data-mode="distance">Distance</button>
+    </div>
+    <div class="stepper">
+      <button type="button" id="minus" class="round" aria-label="Shorter">−</button>
+      <output id="amount" class="amount" aria-live="polite"></output>
+      <button type="button" id="plus" class="round" aria-label="Longer">+</button>
+    </div>
+    <div id="splitRow" class="split" hidden>
+      <label for="split">500m split</label>
+      <input id="split" type="text" inputmode="numeric" autocomplete="off" value="2:10">
+    </div>
+  </section>
+
+  <button type="button" id="planBtn" class="plan-btn" aria-label="Show plan">
+    <span id="strip" class="strip"></span>
+    <span id="planMeta" class="plan-meta"></span>
+  </button>
+
+  <button type="button" id="start" class="start">Start</button>
+
+  <div id="planSheet" class="sheet" hidden>
+    <div class="sheet-card plan-card">
+      <div class="sheet-head">
+        <p class="sheet-title">Plan</p>
+        <button type="button" id="planClose" class="x" aria-label="Close">×</button>
+      </div>
+      <ol id="planList" class="plan"></ol>
+    </div>
+  </div>
+</main>
+
+<!-- Rowing -->
+<main id="row" class="screen row" hidden>
+  <div class="row-head">
+    <div>
+      <p id="rep" class="rep"></p>
+      <h2 id="segName" class="seg-name"></h2>
+    </div>
+    <p class="rate"><span id="spm"></span><small>spm</small></p>
+  </div>
+
+  <div class="cue" aria-hidden="true">
+    <div class="rail"><div id="fill" class="rail-fill"></div><div id="puck" class="puck"></div></div>
+    <p class="phase"><span id="phase">Drive</span></p>
+  </div>
+
+  <div id="centre" class="centre">
+    <div id="clock" class="clock">
+      <p id="segLeft" class="seg-left" aria-label="Time left in interval">0:00</p>
+    </div>
+    <div id="countdown" class="countdown" aria-hidden="true" aria-live="assertive">
+      <div class="cd-text">
+        <p class="cd-label">Next up</p>
+        <p id="cdName" class="cd-name"></p>
+        <p id="cdRate" class="cd-rate"></p>
+      </div>
+      <p class="cd-count"><span id="cdNum" class="cd-num">4</span><span id="cdUnit" class="cd-unit">strokes</span></p>
+      <div id="cdBar" class="cd-bar"></div>
+      <div id="cdFlash" class="cd-flash"></div>
+    </div>
+  </div>
+
+  <dl class="stats">
+    <div><dt>Total left</dt><dd id="totalLeft"></dd></div>
+    <div><dt>Elapsed</dt><dd id="elapsed"></dd></div>
+    <div class="stat-next"><dt>Then</dt><dd id="nextName"></dd></div>
+  </dl>
+
+  <div class="progress" aria-hidden="true"><div id="ticks" class="ticks"></div><div id="progFill" class="prog-fill"></div></div>
+
+  <div class="controls">
+    <button type="button" id="pause" class="ctl">Pause</button>
+    <button type="button" id="skip" class="ctl">Skip</button>
+    <button type="button" id="end" class="ctl">End</button>
+  </div>
+
+  <div id="pausedSheet" class="sheet" hidden>
+    <div class="sheet-card">
+      <p class="sheet-title">Paused</p>
+      <button type="button" id="resume" class="start">Resume</button>
+    </div>
+  </div>
+
+  <div id="endSheet" class="sheet" hidden>
+    <div class="sheet-card">
+      <p class="sheet-title">End this session?</p>
+      <button type="button" id="endYes" class="start">End session</button>
+      <button type="button" id="endNo" class="ghost">Keep rowing</button>
+    </div>
+  </div>
+</main>
+
+<!-- Done -->
+<main id="done" class="screen done" hidden>
+  <h2 class="done-title">Session done</h2>
+  <dl class="done-stats">
+    <div><dt>Rowed</dt><dd id="dTime"></dd></div>
+    <div><dt>Intervals</dt><dd id="dCount"></dd></div>
+    <div><dt>Hard work</dt><dd id="dHard"></dd></div>
+  </dl>
+  <button type="button" id="again" class="start">New session</button>
+</main>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
