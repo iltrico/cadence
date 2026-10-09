@@ -500,7 +500,8 @@ function tick(now) {
   const toNextCatch = (1 - run.phase) * P;
   const cx = (rem - toNextCatch) / P;           // catches until the boundary
   const left = Math.max(1, Math.round(cx) + 1); // strokes left, current one included
-  const inCd = left <= COUNTDOWN_STROKES;
+  // Drills show their own progress in the stage bar, so they skip the countdown.
+  const inCd = left <= COUNTDOWN_STROKES && $('row').dataset.mode !== 'stages';
   if (inCd !== run.cd) {
     run.cd = inCd;
     $('centre').classList.toggle('cd', inCd);
