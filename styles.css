@@ -77,7 +77,12 @@ input { user-select: text; -webkit-user-select: text; }
   --shift: 0px;
 }
 .type > span { transform: translateX(var(--shift)); }
-.type .t-rate { font-size: 1rem; font-weight: 700; margin-bottom: auto; }
+.type .t-top { display: flex; justify-content: space-between; align-items: center; gap: var(--s8); margin-bottom: auto; }
+.type .t-badge {
+  font-size: 0.875rem; font-weight: 600; line-height: 1;
+  padding: 6px 10px; border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--cfg) 14%, transparent);
+}
 .type .t-name {
   font-size: clamp(2.25rem, 11vw, 3rem);
   font-weight: 800;

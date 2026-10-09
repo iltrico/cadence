@@ -41,7 +41,7 @@ function buildTypes() {
   $('types').innerHTML = TYPES.map((t) => `
     <button type="button" class="type" role="radio" data-id="${t.id}"
       style="--cbg:${KIND[t.kind].bg};--cfg:${KIND[t.kind].ink}">
-      <span class="t-rate">${t.rate}</span>
+      <span class="t-top"><span class="t-rate">${t.rate}</span><span class="t-badge" hidden>Express</span></span>
       <span class="t-name">${t.name}</span>
       <span class="t-desc">${t.desc}</span>
     </button>`).join('');
@@ -53,6 +53,10 @@ function renderTypes() {
   document.querySelectorAll('.type').forEach((b, j) => {
     b.setAttribute('aria-checked', j === i);
     b.tabIndex = j === i ? 0 : -1;
+    // Express: this session runs in its short format at the chosen length.
+    const x = !!(allPlans[j] && allPlans[j].express);
+    b.querySelector('.t-badge').hidden = !x;
+    b.setAttribute('aria-label', `${TYPES[j].name}${x ? ', Express' : ''}`);
   });
 }
 
@@ -118,22 +122,8 @@ function renderLength() {
   $('plus').disabled = value >= L.max;
   $('splitRow').hidden = state.mode !== 'distance';
   $('split').setAttribute('aria-invalid', parseSplit(state.split) === null);
-  if (state.mode === 'distance') { metaTimers.forEach(clearTimeout); shownCount = null; $('planMeta').textContent = `About ${fmt(planTotal(plan))}`; }
-  else tickCount(plan.length);
 }
 
-// "N intervals" steps one at a time to a new count, then pops, like the rate.
-let shownCount = null, metaTimers = [];
-function tickCount(to) {
-  const el = $('planMeta'), from = shownCount;
-  const label = (n) => `${n} intervals`;
-  metaTimers.forEach(clearTimeout); metaTimers = [];
-  shownCount = to;
-  if (from === null || from === to || matchMedia('(prefers-reduced-motion: reduce)').matches) { el.textContent = label(to); return; }
-  const n = Math.abs(to - from), dir = Math.sign(to - from), T = Math.min(500, 30 * n + 150);
-  for (let k = 1; k <= n; k++) metaTimers.push(setTimeout(() => { el.textContent = label(from + dir * k); }, (k * T) / n));
-  metaTimers.push(setTimeout(() => popEl(el), Math.max(0, T - 120)));
-}
 function popEl(el) {
   el.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.15)', offset: 0.35 }, { transform: 'scale(1)' }],
     { duration: 420, easing: 'cubic-bezier(.2,.9,.3,1.4)' });
@@ -162,9 +152,7 @@ function buildSlots() {
   if (strip.children.length !== N) strip.innerHTML = '<span></span>'.repeat(N);
 }
 
-function drawBar(a, b, t) {
-  const A = slotPlans[a], B = slotPlans[b];
-  if (!A || !B) return;
+function drawSlots(A, B, t) {
   [...$('strip').children].forEach((el, k) => {
     const w = A[k].w + (B[k].w - A[k].w) * t;
     el.style.flex = `${w} 0 0`;
@@ -172,13 +160,45 @@ function drawBar(a, b, t) {
     el.style.background = `rgb(${A[k].c.map((v, q) => Math.round(v + (B[k].c[q] - v) * t)).join(',')})`;
   });
 }
+function drawBar(a, b, t) {
+  const A = slotPlans[a], B = slotPlans[b];
+  if (!A || !B) return;
+  cancelAnimationFrame(barTween); barTween = 0;   // a swipe takes over from any length tween
+  drawSlots(A, B, t);
+}
 
-function renderPlan() {
-  buildSlots();
+// Spread a slot list over N slots, keeping order, so two plans can blend even when
+// the number of slots changed with the length.
+function resample(slots, N) {
+  if (slots.length === N) return slots;
+  const out = Array.from({ length: N }, () => null);
+  slots.forEach((sl, j) => { out[slots.length === 1 ? 0 : Math.round((j * (N - 1)) / (slots.length - 1))] = sl; });
+  let c = slots[0].c;
+  return out.map((sl) => { if (sl) { c = sl.c; return sl; } return { w: 0, c }; });
+}
+
+// Changing the length morphs the bar from the old plan to the new one, like a swipe.
+let barTween = 0;
+function tweenBar(from, to) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { drawSlots(to, to, 0); return; }
+  const A = resample(from, to.length), t0 = performance.now(), D = 320;
+  cancelAnimationFrame(barTween);
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3);
+    drawSlots(A, to, e);
+    barTween = k < 1 ? requestAnimationFrame(step) : 0;
+  };
+  barTween = requestAnimationFrame(step);
+}
+
+function renderPlan(animate = false) {
   const idx = TYPES.findIndex((t) => t.id === state.type);
+  const before = slotPlans[idx];
+  buildSlots();
   plan = allPlans[idx];
   const total = planTotal(plan);
-  drawBar(idx, idx, 0);
+  if (animate && before) tweenBar(before, slotPlans[idx]);
+  else drawBar(idx, idx, 0);
   let at = 0;
   $('planList').innerHTML = plan.map((s) => {
     const row = `<li><span class="p-at">${fmt(at)}</span><span class="p-dot" style="background:${KIND[s.kind].bg}"></span>
@@ -189,13 +209,13 @@ function renderPlan() {
   $('start').textContent = `Start ${fmt(total)}`;
 }
 
-function refresh() { renderTypes(); renderPlan(); renderLength(); persist(); }
+function refresh() { renderPlan(); renderTypes(); renderLength(); persist(); }
 
 function setValue(v) {
   const L = LIMITS[state.mode];
   v = Math.min(L.max, Math.max(L.min, Math.round(v / L.step) * L.step));
   if (state.mode === 'time') state.minutes = v; else state.meters = v;
-  refresh();
+  renderPlan(true); renderTypes(); renderLength(); persist();
 }
 
 $('types').addEventListener('click', (e) => {
@@ -218,7 +238,7 @@ $('types').addEventListener('keydown', (e) => {
 });
 document.querySelector('.toggle').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
-  state.mode = b.dataset.mode; refresh();
+  state.mode = b.dataset.mode; renderPlan(true); renderTypes(); renderLength(); persist();
 });
 $('minus').addEventListener('click', () => setValue((state.mode === 'time' ? state.minutes : state.meters) - LIMITS[state.mode].step));
 $('plus').addEventListener('click', () => setValue((state.mode === 'time' ? state.minutes : state.meters) + LIMITS[state.mode].step));
@@ -227,7 +247,7 @@ $('planClose').addEventListener('click', () => { $('planSheet').hidden = true; }
 $('planSheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.hidden = true; });
 $('split').addEventListener('input', (e) => {
   state.split = e.target.value;
-  if (parseSplit(state.split) !== null) { renderPlan(); persist(); }
+  if (parseSplit(state.split) !== null) { renderPlan(true); renderTypes(); persist(); }
   renderLength();
 });
 $('split').value = state.split;
@@ -293,7 +313,7 @@ function startRun() {
   const segs = plan.map((s) => ({ ...s }));
   const starts = []; let acc = 0;
   segs.forEach((s) => { starts.push(acc); acc += s.dur; });
-  run = { segs, starts, total: acc, elapsed: 0, last: performance.now(), paused: false, phase: 0, idx: -1, txt: {}, cd: false, clockAnim: null,
+  run = { segs, starts, total: acc, elapsed: 0, last: performance.now(), paused: false, phase: 0, idx: -1, txt: {}, cd: false, clockAnim: null, cueSpm: segs[0].spm,
     rowedBy: segs.map(() => 0), startedAt: new Date().toISOString(), type: state.type, mode: state.mode,
     target: state.mode === 'time' ? `${state.minutes} min` : `${state.meters} m` };
   $('ticks').innerHTML = starts.slice(1).map((t) => `<span style="left:${(t / acc) * 100}%"></span>`).join('');
@@ -339,9 +359,10 @@ function startClockTick() {
 }
 
 function enterSeg(i) {
+  const first = run.idx < 0;
   run.idx = i;
   const s = run.segs[i], k = KIND[s.kind];
-  startClockTick();
+  if (!first) startClockTick();
   const row = $('row');
   row.style.setProperty('--bg', k.bg);
   row.style.setProperty('--fg', k.ink);
@@ -356,6 +377,7 @@ function enterSeg(i) {
 // Drive takes about a third of the stroke at low rates, closer to 40% when racing.
 const driveShare = (spm) => 0.33 + Math.min(1, Math.max(0, (spm - 20) / 12)) * 0.09;
 const ease = (t) => 0.5 - Math.cos(Math.PI * t) / 2;
+const easeOut = (t) => 1 - (1 - t) * (1 - t);
 
 function setText(id, value) {
   if (run.txt[id] !== value) { run.txt[id] = value; $(id).textContent = value; }
@@ -371,9 +393,11 @@ function tick(now) {
   if (!run.paused) {
     if (run.idx >= 0) run.rowedBy[run.idx] += Math.min(wall, run.total - run.elapsed);
     run.elapsed += wall;
-    const ph = run.phase + dt * (seg?.spm || 20) / 60;
+    const ph = run.phase + dt * run.cueSpm / 60;
     caught = ph >= 1;                     // a catch happened this frame
     run.phase = ph % 1;
+    // The cue only changes pace on a catch, so a stroke is never stretched or cut.
+    if (caught && seg) run.cueSpm = seg.spm;
   }
   if (run.elapsed >= run.total) { finish(true); return; }
 
@@ -388,6 +412,7 @@ function tick(now) {
     if (cur < last && caught && end - run.elapsed < P0 / 2) {
       run.starts[cur + 1] = run.elapsed;
       enterSeg(cur + 1);
+      run.cueSpm = run.segs[cur + 1].spm;
     } else if (cur < last && run.elapsed - end > P0) {
       enterSeg(idxAt(run.elapsed));        // tab was frozen: catch up by time
     }
@@ -398,9 +423,9 @@ function tick(now) {
   const rem = segEnd - run.elapsed;
 
   // Stroke cue
-  const d = driveShare(s.spm), p = run.phase;
+  const d = driveShare(run.cueSpm), p = run.phase;
   const drive = p < d;
-  const x = drive ? ease(p / d) : 1 - ease((p - d) / (1 - d));
+  const x = drive ? easeOut(p / d) : 1 - ease((p - d) / (1 - d));
   $('row').style.setProperty('--x', x.toFixed(4));
 
   // Metrics
@@ -639,7 +664,6 @@ $('skip').addEventListener('click', () => {
   const nextStart = run.starts[run.idx + 1];
   if (nextStart === undefined) { run.elapsed = run.total; return; }
   run.elapsed = Math.max(run.elapsed, nextStart);
-  run.phase = 0;                           // the new interval starts on a fresh stroke
   enterSeg(run.idx + 1);
 });
 $('end').addEventListener('click', () => { $('endSheet').hidden = false; });
