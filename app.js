@@ -1,4 +1,10 @@
-import { KIND, TYPES, buildPlan, fmt, planTotal } from './plan.js';
+import { KIND, TYPES, WORDS, buildPlan, fmt, planTotal } from './plan.js';
+import { t, LOCALE, translatePage } from './i18n.js';
+
+// Shown names: plans keep English data; the interface translates words and sessions.
+const wordName = (s) => (s.word ? t(`word.${s.word}`) : s.name);
+const typeName = (id) => t(`type.${id}`);
+const rateText = (r) => r.replace('spm', t('spm'));
 
 const $ = (id) => document.getElementById(id);
 const COUNTDOWN_STROKES = 4;
@@ -38,12 +44,12 @@ const targetSeconds = () => {
 // ---------- Setup screen ----------
 // Program picker: horizontal snap carousel. The card that settles in the centre is the selection.
 function buildTypes() {
-  $('types').innerHTML = TYPES.map((t) => `
-    <button type="button" class="type" role="radio" data-id="${t.id}"
-      style="--cbg:${KIND[t.kind].bg};--cfg:${KIND[t.kind].ink}">
-      <span class="t-top"><span class="t-rate">${t.rate}</span><span class="t-badge" hidden>Express</span></span>
-      <span class="t-name">${t.name}</span>
-      <span class="t-desc">${t.desc}</span>
+  $('types').innerHTML = TYPES.map((ty) => `
+    <button type="button" class="type" role="radio" data-id="${ty.id}"
+      style="--cbg:${KIND[ty.kind].bg};--cfg:${KIND[ty.kind].ink}">
+      <span class="t-top"><span class="t-rate">${rateText(ty.rate)}</span><span class="t-badge" aria-hidden="true">${t('bestFrom', { n: ty.xBelow })}</span></span>
+      <span class="t-name">${typeName(ty.id)}</span>
+      <span class="t-desc">${t(`desc.${ty.id}`)}</span>
     </button>`).join('');
   $('dots').innerHTML = TYPES.map(() => '<span></span>').join('');
 }
@@ -53,10 +59,12 @@ function renderTypes() {
   document.querySelectorAll('.type').forEach((b, j) => {
     b.setAttribute('aria-checked', j === i);
     b.tabIndex = j === i ? 0 : -1;
-    // Express: this session runs in its short format at the chosen length.
+    // Below its full format, a session says from which length it works best.
     const x = !!(allPlans[j] && allPlans[j].express);
-    b.querySelector('.t-badge').hidden = !x;
-    b.setAttribute('aria-label', `${TYPES[j].name}${x ? ', Express' : ''}`);
+    const hint = t('bestFrom', { n: TYPES[j].xBelow });
+    // The badge always holds its place, so the row never shifts; it only fades in and out.
+    b.querySelector('.t-badge').classList.toggle('on', x);
+    b.setAttribute('aria-label', `${typeName(TYPES[j].id)}${x ? `, ${hint.toLowerCase()}` : ''}`);
   });
 }
 
@@ -115,8 +123,8 @@ function renderLength() {
   const L = LIMITS[state.mode];
   const value = state.mode === 'time' ? state.minutes : state.meters;
   document.querySelectorAll('.toggle button').forEach((b) => b.setAttribute('aria-checked', b.dataset.mode === state.mode));
-  const shown = state.mode === 'time' ? value : value.toLocaleString('en-US');
-  $('amount').innerHTML = `${shown}<small>${L.unit}</small>`;
+  const shown = state.mode === 'time' ? value : value.toLocaleString(LOCALE);
+  $('amount').innerHTML = `${shown}<small>${t(L.unit)}</small>`;
   $('amount').classList.toggle('long', state.mode === 'distance');
   $('minus').disabled = value <= L.min;
   $('plus').disabled = value >= L.max;
@@ -202,11 +210,11 @@ function renderPlan(animate = false) {
   let at = 0;
   $('planList').innerHTML = plan.map((s) => {
     const row = `<li><span class="p-at">${fmt(at)}</span><span class="p-dot" style="background:${KIND[s.kind].bg}"></span>
-      <span class="p-name">${s.name}</span><span class="p-spm">${s.spm} spm</span><span class="p-dur">${fmt(s.dur)}</span></li>`;
+      <span class="p-name">${wordName(s)}</span><span class="p-spm">${s.spm} ${t('spm')}</span><span class="p-dur">${fmt(s.dur)}</span></li>`;
     at += s.dur;
     return row;
   }).join('');
-  $('start').textContent = `Start ${fmt(total)}`;
+  $('start').textContent = t('start', { time: fmt(total) });
 }
 
 function refresh() { renderPlan(); renderTypes(); renderLength(); persist(); }
@@ -301,7 +309,7 @@ function resetCountdown() {
 }
 // Drop one-shot animation classes once they've played. A class left behind would replay
 // its animation the next time the rowing screen is shown.
-['spm', 'segLeft', 'cdNum', 'cdFlash'].forEach((id) => {
+['spm', 'segLeft', 'cdNum', 'cdFlash', 'stageName'].forEach((id) => {
   $(id).addEventListener('animationend', (e) => e.currentTarget.classList.remove('pop', 'go', 'on'));
 });
 // Once the exit animation has played, drop the class so the panel is fully hidden again.
@@ -317,7 +325,7 @@ function startRun() {
     rowedBy: segs.map(() => 0), startedAt: new Date().toISOString(), type: state.type, mode: state.mode,
     target: state.mode === 'time' ? `${state.minutes} min` : `${state.meters} m` };
   $('ticks').innerHTML = starts.slice(1).map((t) => `<span style="left:${(t / acc) * 100}%"></span>`).join('');
-  $('pause').textContent = 'Pause';
+  $('pause').textContent = t('pause');
   resetCountdown();
   shownRate = null;
   show('row');
@@ -358,6 +366,17 @@ function startClockTick() {
   run.clockAnim = { t0: performance.now(), popped: false };
 }
 
+const MODULES = { rate: ['.rail', '.rate'], stages: ['.stage-bar', '.stage-text'] };
+function swapModules(from, to) {
+  const play = (sel, cls) => {
+    const el = document.querySelector(`#row ${sel}`);
+    el.classList.remove('mod-in', 'mod-out'); void el.offsetWidth; el.classList.add(cls);
+    el.addEventListener('animationend', () => el.classList.remove(cls), { once: true });
+  };
+  (MODULES[from] || []).forEach((sel) => play(sel, 'mod-out'));
+  (MODULES[to] || []).forEach((sel) => play(sel, 'mod-in'));
+}
+
 function enterSeg(i) {
   const first = run.idx < 0;
   run.idx = i;
@@ -368,10 +387,22 @@ function enterSeg(i) {
   row.style.setProperty('--fg', k.ink);
   document.querySelector('meta[name="theme-color"]').content = k.bg;
   document.documentElement.style.backgroundColor = k.bg;
-  $('segName').textContent = s.name;
-  tickRate(s.spm);
+  $('segName').textContent = wordName(s);
+  // Each word shows its own modules: the rhythm cue and rate, or its drill stages.
+  // A change of module swaps them with the countdown's shrink and grow.
+  const mode = WORDS[s.word]?.detail || 'rate';
+  if (row.dataset.mode !== mode) {
+    const prev = row.dataset.mode;
+    row.dataset.mode = mode;
+    if (!first && !matchMedia('(prefers-reduced-motion: reduce)').matches) swapModules(prev, mode);
+    if (mode === 'rate') shownRate = first ? null : shownRate;
+  }
+  if (mode === 'stages') {
+    run.stage = -1;
+    document.querySelectorAll('#stageBar i').forEach((el) => { el.style.width = '0'; });
+  } else tickRate(s.spm);
   const next = run.segs[i + 1];
-  $('nextName').textContent = next ? next.name : 'Finish';
+  $('nextName').textContent = next ? wordName(next) : t('finish');
 }
 
 // Drive takes about a third of the stroke at low rates, closer to 40% when racing.
@@ -422,6 +453,23 @@ function tick(now) {
   const segEnd = run.starts[i + 1] ?? run.total;
   const rem = segEnd - run.elapsed;
 
+  // Drill stages: the bar fills with time; the stage name changes on a catch.
+  if ($('row').dataset.mode === 'stages') {
+    const stages = WORDS[s.word].stages;
+    const t0 = run.starts[i], len = (segEnd - t0) / stages.length;
+    const q = Math.min(stages.length - 1, Math.floor((run.elapsed - t0) / len));
+    document.querySelectorAll('#stageBar i').forEach((el, k) => {
+      const shown = run.stage < 0 ? 0 : run.stage;
+      const w = k < shown ? 1 : k > shown ? 0 : Math.min(1, (run.elapsed - t0 - k * len) / len);
+      el.style.width = `${Math.max(0, w) * 100}%`;
+    });
+    if (q !== run.stage && (caught || run.stage < 0)) {
+      run.stage = q;
+      $('stageName').textContent = t(`stage.${stages[q]}`);
+      if (q > 0) { const el = $('stageName'); el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+    }
+  }
+
   // Stroke cue
   const d = driveShare(run.cueSpm), p = run.phase;
   const drive = p < d;
@@ -464,8 +512,8 @@ function tick(now) {
       const cd = $('countdown');
       cd.style.setProperty('--nbg', k.bg);
       cd.style.setProperty('--nfg', k.ink);
-      $('cdName').textContent = next ? next.name : 'Finish';
-      $('cdRate').textContent = next ? `${next.spm} spm for ${fmt(next.dur)}` : 'Last strokes, empty the tank';
+      $('cdName').textContent = next ? wordName(next) : t('finish');
+      $('cdRate').textContent = next ? t('nextRate', { spm: next.spm, time: fmt(next.dur) }) : t('lastStrokes');
     }
   }
   if (inCd) {
@@ -474,7 +522,7 @@ function tick(now) {
       setText('cdNum', label);
       const n = $('cdNum');
       n.classList.remove('pop'); void n.offsetWidth; n.classList.add('pop');
-      $('cdUnit').textContent = left === 1 ? 'stroke' : 'strokes';
+      $('cdUnit').textContent = left === 1 ? t('stroke') : t('strokes');
     }
     // Strokes still to row as a continuous value; full once the boundary catch has passed.
     const remaining = cx < -0.5 ? 0 : left - run.phase;
@@ -490,7 +538,7 @@ function setPaused(p) {
   run.paused = p;
   run.last = performance.now();
   $('pausedSheet').hidden = !p;
-  $('pause').textContent = p ? 'Resume' : 'Pause';
+  $('pause').textContent = p ? t('resume') : t('pause');
   if (!p) holdWake();
 }
 
@@ -515,7 +563,7 @@ function playRecap(rec) {
   recapTimers.forEach(clearTimeout); recapTimers = [];
   const rows = [
     ['dTime', Math.floor(rec.rowed / 60), (v) => fmt(v * 60), fmt(rec.rowed)],
-    ['dCount', rec.intervalsDone, (v) => `${v} of ${rec.intervals}`, `${rec.intervalsDone} of ${rec.intervals}`],
+    ['dCount', rec.intervalsDone, (v) => t('of', { a: v, b: rec.intervals }), t('of', { a: rec.intervalsDone, b: rec.intervals })],
     ['dHard', Math.floor(rec.hard / 60), (v) => fmt(v * 60), fmt(rec.hard)],
   ];
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) { rows.forEach(([id, , , fin]) => { $(id).textContent = fin; }); return; }
@@ -580,24 +628,24 @@ function saveSession(rec) {
   try { navigator.storage?.persist?.(); } catch {}
 }
 
-const dayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
-const timeFmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
+const dayFmt = new Intl.DateTimeFormat(LOCALE, { weekday: 'short', day: 'numeric', month: 'short' });
+const timeFmt = new Intl.DateTimeFormat(LOCALE, { hour: '2-digit', minute: '2-digit' });
 
 function renderHistory() {
   const list = loadHistory();
   const total = list.reduce((a, x) => a + x.rowed, 0);
   $('histMeta').textContent = list.length
-    ? `${list.length} ${list.length === 1 ? 'session' : 'sessions'}, ${fmt(total)} rowed`
-    : 'No sessions yet';
+    ? t(list.length === 1 ? 'historyOne' : 'historyMany', { n: list.length, time: fmt(total) })
+    : t('noSessions');
   $('histList').innerHTML = list.map((x) => {
     const d = new Date(x.startedAt);
     const color = KIND[(TYPES.find((t) => t.id === x.type) || { kind: 'steady' }).kind].bg;
     return `<li>
       <span class="h-dot" style="background:${color}"></span>
-      <span class="h-main"><span class="h-name">${x.session}</span>
-        <span class="h-sub">${dayFmt.format(d)}, ${timeFmt.format(d)}${x.completed ? '' : ', ended early'}</span></span>
+      <span class="h-main"><span class="h-name">${TYPES.some((ty) => ty.id === x.type) ? typeName(x.type) : x.session}</span>
+        <span class="h-sub">${dayFmt.format(d)}, ${timeFmt.format(d)}${x.completed ? '' : `, ${t('endedEarly')}`}</span></span>
       <span class="h-dur">${fmt(x.rowed)}</span>
-      <button type="button" class="h-del" data-id="${x.id}" aria-label="Delete session">×</button>
+      <button type="button" class="h-del" data-id="${x.id}" aria-label="${t('deleteSession')}">×</button>
     </li>`;
   }).join('');
   $('exportCsv').disabled = $('exportJson').disabled = !list.length;
@@ -642,7 +690,7 @@ $('exportJson').addEventListener('click', () => exportFile(`cadence-${stamp()}.j
 $('histList').addEventListener('click', (e) => {
   const b = e.target.closest('.h-del'); if (!b) return;
   if (b.dataset.confirm !== '1') {
-    b.dataset.confirm = '1'; b.textContent = 'Delete'; b.classList.add('arm');
+    b.dataset.confirm = '1'; b.textContent = t('delete'); b.classList.add('arm');
     setTimeout(() => { if (b.isConnected) { b.dataset.confirm = ''; b.textContent = '×'; b.classList.remove('arm'); } }, 2500);
     return;
   }
@@ -680,6 +728,7 @@ document.addEventListener('keydown', (e) => {
 window.addEventListener('beforeunload', (e) => { if (run) e.preventDefault(); });
 
 // ---------- Boot ----------
+translatePage();
 buildTypes();
 refresh();
 requestAnimationFrame(() => { centreCard(state.type, false); updateCards(); });

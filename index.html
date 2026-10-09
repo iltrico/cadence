@@ -20,28 +20,28 @@
 
 <!-- Setup -->
 <main id="setup" class="screen setup">
-  <header class="bar"><h1 class="wordmark">Cadence</h1><button type="button" id="historyBtn" class="pill">History</button></header>
+  <header class="bar"><h1 class="wordmark">Cadence</h1><button type="button" id="historyBtn" class="pill" data-i18n="history">History</button></header>
 
-  <div id="types" class="types" role="radiogroup" aria-label="Session"></div>
+  <div id="types" class="types" role="radiogroup" aria-label="Session" data-i18n-aria="session"></div>
   <div id="dots" class="dots" aria-hidden="true"></div>
 
-  <section class="length" aria-label="Length">
-    <div class="toggle" role="radiogroup" aria-label="Set length by">
-      <button type="button" role="radio" data-mode="time">Time</button>
-      <button type="button" role="radio" data-mode="distance">Distance</button>
+  <section class="length" aria-label="Length" data-i18n-aria="length">
+    <div class="toggle" role="radiogroup" aria-label="Set length by" data-i18n-aria="setLengthBy">
+      <button type="button" role="radio" data-mode="time" data-i18n="time">Time</button>
+      <button type="button" role="radio" data-mode="distance" data-i18n="distance">Distance</button>
     </div>
     <div class="stepper">
-      <button type="button" id="minus" class="round" aria-label="Shorter">−</button>
+      <button type="button" id="minus" class="round" aria-label="Shorter" data-i18n-aria="shorter">−</button>
       <output id="amount" class="amount" aria-live="polite"></output>
-      <button type="button" id="plus" class="round" aria-label="Longer">+</button>
+      <button type="button" id="plus" class="round" aria-label="Longer" data-i18n-aria="longer">+</button>
     </div>
     <div id="splitRow" class="split" hidden>
-      <label for="split">500m split</label>
+      <label for="split" data-i18n="split">500m split</label>
       <input id="split" type="text" inputmode="numeric" autocomplete="off" value="2:10">
     </div>
   </section>
 
-  <button type="button" id="planBtn" class="plan-btn" aria-label="Show plan">
+  <button type="button" id="planBtn" class="plan-btn" aria-label="Show plan" data-i18n-aria="showPlan">
     <span id="strip" class="strip"></span>
   </button>
 
@@ -50,8 +50,8 @@
   <div id="planSheet" class="sheet" hidden>
     <div class="sheet-card plan-card">
       <div class="sheet-head">
-        <p class="sheet-title">Plan</p>
-        <button type="button" id="planClose" class="x" aria-label="Close">×</button>
+        <p class="sheet-title" data-i18n="plan">Plan</p>
+        <button type="button" id="planClose" class="x" aria-label="Close" data-i18n-aria="close">×</button>
       </div>
       <ol id="planList" class="plan"></ol>
     </div>
@@ -59,24 +59,28 @@
 </main>
 
 <!-- Rowing -->
-<main id="row" class="screen row" hidden>
+<main id="row" class="screen row" data-mode="rate" hidden>
   <div class="row-head">
     <h2 id="segName" class="seg-name"></h2>
   </div>
 
   <div class="cue" aria-hidden="true">
     <div class="rail"><div id="fill" class="rail-fill"></div><div id="puck" class="puck"></div></div>
+    <div id="stageBar" class="stage-bar"><span><i></i></span><span><i></i></span><span><i></i></span><span><i></i></span></div>
   </div>
 
-  <p class="rate"><span id="spm"></span><small>spm</small></p>
+  <div id="detail" class="detail">
+    <p class="rate"><span id="spm"></span><small data-i18n="spm">spm</small></p>
+    <p class="stage-text" aria-live="polite"><span id="stageName" class="stage-name"></span></p>
+  </div>
 
   <div id="centre" class="centre">
     <div id="clock" class="clock">
-      <p id="segLeft" class="seg-left" aria-label="Time left in interval">0:00</p>
+      <p id="segLeft" class="seg-left" aria-label="Time left in interval" data-i18n-aria="timeLeft">0:00</p>
     </div>
     <div id="countdown" class="countdown" aria-hidden="true" aria-live="assertive">
       <div class="cd-text">
-        <p class="cd-label">Next up</p>
+        <p class="cd-label" data-i18n="nextUp">Next up</p>
         <p id="cdName" class="cd-name"></p>
         <p id="cdRate" class="cd-rate"></p>
       </div>
@@ -87,58 +91,58 @@
   </div>
 
   <dl class="stats">
-    <div><dt>Total left</dt><dd id="totalLeft"></dd></div>
-    <div><dt>Elapsed</dt><dd id="elapsed"></dd></div>
-    <div class="stat-next"><dt>Then</dt><dd id="nextName"></dd></div>
+    <div><dt data-i18n="totalLeft">Total left</dt><dd id="totalLeft"></dd></div>
+    <div><dt data-i18n="elapsed">Elapsed</dt><dd id="elapsed"></dd></div>
+    <div class="stat-next"><dt data-i18n="then">Then</dt><dd id="nextName"></dd></div>
   </dl>
 
   <div class="progress" aria-hidden="true"><div id="ticks" class="ticks"></div><div id="progFill" class="prog-fill"></div></div>
 
   <div class="controls">
     <button type="button" id="pause" class="ctl">Pause</button>
-    <button type="button" id="skip" class="ctl">Skip</button>
-    <button type="button" id="end" class="ctl">End</button>
+    <button type="button" id="skip" class="ctl" data-i18n="skip">Skip</button>
+    <button type="button" id="end" class="ctl" data-i18n="end">End</button>
   </div>
 
   <div id="pausedSheet" class="sheet" hidden>
     <div class="sheet-card">
-      <p class="sheet-title">Paused</p>
-      <button type="button" id="resume" class="start">Resume</button>
+      <p class="sheet-title" data-i18n="paused">Paused</p>
+      <button type="button" id="resume" class="start" data-i18n="resume">Resume</button>
     </div>
   </div>
 
   <div id="endSheet" class="sheet" hidden>
     <div class="sheet-card">
-      <p class="sheet-title">End this session?</p>
-      <button type="button" id="endYes" class="start">End session</button>
-      <button type="button" id="endNo" class="ghost">Keep rowing</button>
+      <p class="sheet-title" data-i18n="endQuestion">End this session?</p>
+      <button type="button" id="endYes" class="start" data-i18n="endYes">End session</button>
+      <button type="button" id="endNo" class="ghost" data-i18n="keepRowing">Keep rowing</button>
     </div>
   </div>
 </main>
 
 <!-- Done -->
 <main id="done" class="screen done" hidden>
-  <h2 class="done-title">Session done</h2>
+  <h2 class="done-title" data-i18n="done">Session done</h2>
   <dl class="done-stats">
-    <div><dt>Rowed</dt><dd id="dTime"></dd></div>
-    <div><dt>Intervals</dt><dd id="dCount"></dd></div>
-    <div><dt>Hard work</dt><dd id="dHard"></dd></div>
+    <div><dt data-i18n="rowed">Rowed</dt><dd id="dTime"></dd></div>
+    <div><dt data-i18n="intervals">Intervals</dt><dd id="dCount"></dd></div>
+    <div><dt data-i18n="hardWork">Hard work</dt><dd id="dHard"></dd></div>
   </dl>
   <div class="done-actions">
-    <button type="button" id="again" class="start">Close</button>
-    <button type="button" id="doneHistory" class="ghost">History</button>
+    <button type="button" id="again" class="start" data-i18n="close">Close</button>
+    <button type="button" id="doneHistory" class="ghost" data-i18n="history">History</button>
   </div>
 </main>
 
 <div id="histSheet" class="sheet" hidden>
   <div class="sheet-card plan-card hist-card">
     <div class="sheet-head">
-      <div><p class="sheet-title">History</p><p id="histMeta" class="hist-meta"></p></div>
-      <button type="button" id="histClose" class="x" aria-label="Close">×</button>
+      <div><p class="sheet-title" data-i18n="history">History</p><p id="histMeta" class="hist-meta"></p></div>
+      <button type="button" id="histClose" class="x" aria-label="Close" data-i18n-aria="close">×</button>
     </div>
     <ol id="histList" class="hist"></ol>
     <div class="hist-actions">
-      <button type="button" id="exportCsv" class="start">Export CSV</button>
+      <button type="button" id="exportCsv" class="start" data-i18n="exportCsv">Export CSV</button>
       <button type="button" id="exportJson" class="ghost">JSON</button>
     </div>
   </div>
