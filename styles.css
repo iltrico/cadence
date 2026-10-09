@@ -9,6 +9,9 @@
   --bg: #FF9F1C;
   --fg: #231300;
   --font: 'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Spacing and radius tokens (Figma: Spacing collection) */
+  --s4: 4px; --s8: 8px; --s12: 12px; --s16: 16px; --s20: 20px; --s24: 24px; --s32: 32px;
+  --r-card: 16px; --r-pill: 999px;
   box-sizing: border-box;
 }
 *, *::before, *::after { box-sizing: inherit; }
@@ -43,7 +46,7 @@ input { user-select: text; -webkit-user-select: text; }
 }
 .bar { display: flex; align-items: center; justify-content: space-between; height: 2.25rem; }
 .pill { border: 0; background: #E3E7F0; border-radius: 999px; padding: 0.5rem 1rem; font-weight: 700; }
-.wordmark { margin: 0; font-size: 1.5rem; font-weight: 800; font-stretch: 75%; letter-spacing: -0.02em; }
+.wordmark { margin: 0; font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; }
 
 .types {
   display: flex; gap: 0.75rem;
@@ -75,7 +78,7 @@ input { user-select: text; -webkit-user-select: text; }
 .type .t-rate { font-size: 1rem; font-weight: 700; margin-bottom: auto; }
 .type .t-name {
   font-size: clamp(2.25rem, 11vw, 3rem);
-  font-weight: 800; font-stretch: 80%;
+  font-weight: 800;
   letter-spacing: -0.02em; line-height: 0.95;
 }
 .type .t-desc { font-size: 1rem; line-height: 1.35; opacity: 0.85; }
@@ -100,12 +103,11 @@ input { user-select: text; -webkit-user-select: text; }
 .amount {
   font-size: clamp(3.5rem, 9vh, 6rem);
   font-weight: 800;
-  font-stretch: 75%;
   letter-spacing: -0.03em;
   line-height: 1;
 }
 .amount.long { font-size: clamp(2.75rem, 7.5vh, 4.75rem); }
-.amount small { font-size: 0.3em; font-weight: 600; font-stretch: 100%; letter-spacing: 0; margin-left: 0.25em; }
+.amount small { font-size: 0.3em; font-weight: 600; letter-spacing: 0; margin-left: 0.25em; }
 
 
 .split { display: flex; align-items: center; gap: 0.75rem; }
@@ -156,7 +158,7 @@ input { user-select: text; -webkit-user-select: text; }
   background: var(--bg);
   color: var(--fg);
   display: grid;
-  grid-template-rows: auto auto 1fr auto auto auto;
+  grid-template-rows: auto auto auto 1fr auto auto auto;
   grid-template-columns: minmax(0, 1fr);
   gap: 1.25rem;
   transition: background-color 600ms ease, color 600ms ease;
@@ -168,12 +170,11 @@ input { user-select: text; -webkit-user-select: text; }
   margin: 0;
   font-size: clamp(2.25rem, 11vw, 4.5rem);
   font-weight: 800;
-  font-stretch: 80%;
   letter-spacing: -0.02em;
   line-height: 0.95;
 }
 .rate { margin: 0; text-align: right; line-height: 0.9; }
-.rate span { display: block; font-size: clamp(2.75rem, 13vw, 5rem); font-weight: 800; font-stretch: 75%; letter-spacing: -0.02em; }
+.rate span { display: block; font-size: clamp(2.75rem, 13vw, 5rem); font-weight: 800; letter-spacing: -0.02em; }
 .rate small { font-size: 1rem; font-weight: 600; }
 
 /* Stroke cue: drive pushes the seat out fast, recovery slides it back slowly. */
@@ -207,7 +208,6 @@ input { user-select: text; -webkit-user-select: text; }
   margin: 0;
   font-size: clamp(6rem, 34vw, 15rem);
   font-weight: 800;
-  font-stretch: 75%;
   letter-spacing: -0.04em;
   line-height: 0.85;
 }
@@ -245,10 +245,10 @@ input { user-select: text; -webkit-user-select: text; }
 .cd-flash.on { animation: flash 420ms ease-out; }
 @keyframes flash { 0% { opacity: 0.55; } 100% { opacity: 0; } }
 .cd-label { margin: 0; font-weight: 600; opacity: 0.75; }
-.cd-name { margin: 0.2rem 0; font-size: clamp(1.75rem, 8vw, 3rem); font-weight: 800; font-stretch: 80%; line-height: 1; }
+.cd-name { margin: 0.2rem 0; font-size: clamp(1.75rem, 8vw, 3rem); font-weight: 800; line-height: 1; }
 .cd-rate { margin: 0; font-weight: 700; font-size: 1.15rem; }
 .cd-count { margin: 0; display: grid; justify-items: end; }
-.cd-num { display: block; font-size: clamp(6rem, 30vw, 11rem); font-weight: 800; font-stretch: 75%; line-height: 0.8; }
+.cd-num { display: block; font-size: clamp(6rem, 30vw, 11rem); font-weight: 800; line-height: 0.8; }
 .cd-unit { font-weight: 700; font-size: 1rem; min-height: 1.2em; margin-top: 0.4rem; }
 .cd-num { transform-origin: 70% 60%; }
 .cd-num.pop { animation: pop 380ms linear; }
@@ -273,7 +273,7 @@ input { user-select: text; -webkit-user-select: text; }
 
 .stats { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 1.5rem; margin: 0; }
 .stats dt { font-size: 0.9rem; font-weight: 600; opacity: 0.75; }
-.stats dd { margin: 0.1rem 0 0; font-size: 1.6rem; font-weight: 800; font-stretch: 85%; }
+.stats dd { margin: 0.1rem 0 0; font-size: 1.6rem; font-weight: 800; }
 .stat-next dd { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .progress {
@@ -302,7 +302,7 @@ input { user-select: text; -webkit-user-select: text; }
   border-radius: 2rem; padding: 1.5rem;
   display: grid; gap: 0.75rem;
 }
-.sheet-title { margin: 0 0 0.5rem; font-size: 2rem; font-weight: 800; font-stretch: 80%; }
+.sheet-title { margin: 0 0 0.5rem; font-size: 2rem; font-weight: 800; }
 .plan-card { max-height: 78dvh; grid-template-rows: auto minmax(0, 1fr); }
 .sheet-head { display: flex; justify-content: space-between; align-items: center; }
 .sheet-head .sheet-title { margin: 0; }
@@ -316,23 +316,100 @@ input { user-select: text; -webkit-user-select: text; }
   padding: calc(2rem + env(safe-area-inset-top, 0px)) 1.25rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
   display: flex; flex-direction: column; justify-content: center; gap: 2rem;
 }
-.done-title { font-size: clamp(3.5rem, 18vw, 5.5rem); font-weight: 800; font-stretch: 75%; line-height: 0.9; margin: 0; letter-spacing: -0.03em; }
+.done-title { font-size: clamp(3.5rem, 18vw, 5.5rem); font-weight: 800; line-height: 0.9; margin: 0; letter-spacing: -0.03em; }
 .done-stats { margin: 0; display: grid; gap: 1rem; }
 .done-stats div { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid var(--line); padding-bottom: 0.75rem; }
 .done-stats dt { color: var(--muted); font-weight: 600; }
-.done-stats dd { margin: 0; font-size: 2rem; font-weight: 800; font-stretch: 85%; }
+.done-stats dd { margin: 0; font-size: 2rem; font-weight: 800; }
+
+
+/* ---------- Text styles and spacing (Figma: Tokens exploration) ----------
+   display/xl 144 · display/l 80 · display/m 64 · title/xl 48 · title/l 32 · title/m 24 · title/s 20
+   ui/l 18 · ui/m 16 · ui/icon 24 · body/m 16 · body/s 14 · label 14 */
+.seg-left, .cd-num {                                   /* display/xl */
+  font-size: clamp(6rem, 37vw, 9rem); font-weight: 800; line-height: 0.85; letter-spacing: -0.03em;
+}
+.amount, .done-title {                                 /* display/l */
+  font-size: min(5rem, 20.5vw, 11vh); font-weight: 800; line-height: 0.9; letter-spacing: -0.03em;
+}
+.amount.long { font-size: min(3.5rem, 15vw, 8vh); }   /* distance values need the room */
+.rate span {                                           /* display/m */
+  font-size: 4rem; font-weight: 800; line-height: 0.9; letter-spacing: -0.02em;
+}
+.seg-name, .type .t-name {                             /* title/xl */
+  font-size: min(3rem, 12.3vw); font-weight: 800; line-height: 0.95; letter-spacing: -0.02em;
+}
+.sheet-title, .cd-name, .done-stats dd {               /* title/l */
+  font-size: 2rem; font-weight: 800; line-height: 1; letter-spacing: -0.01em;
+}
+.wordmark, .stats dd {                                 /* title/m */
+  font-size: 1.5rem; font-weight: 800; line-height: 1.1; letter-spacing: -0.01em;
+}
+.h-dur {                                               /* title/s */
+  font-size: 1.25rem; font-weight: 800; line-height: 1.1; letter-spacing: 0;
+}
+.start, .ghost, .cd-rate, .amount small {              /* ui/l */
+  font-size: 1.125rem; font-weight: 700; line-height: 1.2; letter-spacing: 0;
+}
+.pill, .toggle button, .ctl, .type .t-rate, .rate small, .cd-unit, .h-name, .plan .p-name, .plan .p-dur {   /* ui/m */
+  font-size: 1rem; font-weight: 700; line-height: 1.2;
+}
+.round, .x, .h-del {                                   /* ui/icon */
+  font-size: 1.5rem; font-weight: 700; line-height: 1;
+}
+.type .t-desc { font-size: 1rem; font-weight: 400; line-height: 1.35; }    /* body/m */
+.h-sub { font-size: 0.875rem; font-weight: 400; line-height: 1.35; }       /* body/s */
+.plan-meta, .stats dt, .cd-label, .hist-meta, .done-stats dt,
+.plan .p-at, .plan .p-spm, .split label {             /* label */
+  font-size: 0.875rem; font-weight: 600; line-height: 1.2;
+}
+
+/* Spacing and radius */
+.type { border-radius: var(--r-card); padding: var(--s20) var(--s24) var(--s24); gap: var(--s4); }
+.countdown { border-radius: var(--r-card); padding: var(--s24) var(--s24) var(--s32); }
+.sheet-card { border-radius: var(--r-card); padding: var(--s24); gap: var(--s12); }
+.toggle { padding: var(--s4); }
+.toggle button { padding: var(--s8) var(--s16); }
+.pill { padding: var(--s8) var(--s16); }
+.ctl { padding: var(--s16) var(--s8); }
+.start, .ghost { padding: var(--s16) var(--s24); }
+#start { padding: var(--s20) var(--s24); }
+.stats { gap: var(--s24); }
+.stats dd { margin-top: var(--s4); }
+.controls { gap: var(--s12); }
+.hist li { padding: var(--s8) 0; gap: var(--s12); }
+.done { gap: var(--s32); }
+.done-actions { gap: var(--s12); }
+.done-stats { gap: var(--s16); }
+.done-stats div { padding-bottom: var(--s12); }
+
+/* Stroke cue: outlined track, slimmer puck ring */
+.rail { background: transparent; box-shadow: inset 0 0 0 2px var(--fg); }
+.puck { border-width: 6px; }
+
+/* Countdown: thicker stroke progress */
+.cd-bar { height: 16px; }
+
+/* Rowing: rate sits under the stroke cue, number and unit on one baseline */
+.rate { display: flex; align-items: baseline; gap: var(--s4); text-align: left; line-height: 0.9; }
+.rate span { display: inline; }
+
+/* Setup: unit stacked under the length value */
+.amount { display: grid; justify-items: center; }
+.amount small { margin: var(--s4) 0 0; }
 
 /* Landscape on a rower arm: cue and clock side by side. */
 @media (orientation: landscape) and (max-height: 560px) {
   .row {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: auto auto 1fr auto auto;
+    grid-template-rows: auto auto auto 1fr auto auto;
     column-gap: 2rem; row-gap: 0.9rem;
   }
-  .row-head { grid-column: 1; }
-  .cue { grid-column: 1; }
-  .centre { grid-column: 2; grid-row: 1 / 4; }
-  .stats { grid-column: 1; grid-row: 3; align-self: end; }
+  .row-head { grid-column: 1; grid-row: 1; }
+  .cue { grid-column: 1; grid-row: 2; }
+  .rate { grid-column: 1; grid-row: 3; }
+  .centre { grid-column: 2; grid-row: 1 / 5; }
+  .stats { grid-column: 1; grid-row: 4; align-self: end; }
   .progress { grid-column: 1 / -1; }
   .controls { grid-column: 1 / -1; }
   .row { padding-top: calc(0.75rem + env(safe-area-inset-top, 0px)); padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)); }
@@ -386,7 +463,7 @@ input { user-select: text; -webkit-user-select: text; }
 .h-main { display: grid; min-width: 0; }
 .h-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .h-sub { color: var(--muted); font-size: 0.9rem; }
-.h-dur { font-weight: 800; font-stretch: 85%; font-size: 1.2rem; }
+.h-dur { font-weight: 800; font-size: 1.2rem; }
 .h-del { min-width: 2.25rem; height: 2.25rem; border: 0; border-radius: 999px; background: none; color: var(--muted); font-size: 1.25rem; font-weight: 700; }
 .h-del.arm { background: #D7263D; color: #fff; font-size: 0.9rem; padding: 0 0.8rem; }
 .hist-actions { display: grid; grid-template-columns: 1fr auto; gap: 0.75rem; }

@@ -4,8 +4,8 @@ const $ = (id) => document.getElementById(id);
 const COUNTDOWN_STROKES = 4;
 
 const LIMITS = {
-  time: { min: 10, max: 120, step: 5, unit: 'min' },
-  distance: { min: 2000, max: 30000, step: 500, unit: 'm' },
+  time: { min: 10, max: 120, step: 5, unit: 'minutes' },
+  distance: { min: 2000, max: 30000, step: 500, unit: 'meters' },
 };
 
 // ---------- State ----------
@@ -247,9 +247,8 @@ function enterSeg(i) {
   document.documentElement.style.backgroundColor = k.bg;
   $('segName').textContent = s.name;
   $('spm').textContent = s.spm;
-  $('rep').textContent = s.rep ? `${s.rep} of ${s.of}` : '\u00a0';
   const next = run.segs[i + 1];
-  $('nextName').textContent = next ? `${next.name} at ${next.spm}` : 'Finish';
+  $('nextName').textContent = next ? next.name : 'Finish';
 }
 
 // Drive takes about a third of the stroke at low rates, closer to 40% when racing.
