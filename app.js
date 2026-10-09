@@ -64,7 +64,7 @@ function updateCards() {
   const box = $('types');
   const cards = box.querySelectorAll('.type');
   if (!cards.length) return;
-  const mid = box.scrollLeft + box.clientWidth / 2;
+  const mid = box.scrollLeft + box.offsetLeft + box.clientWidth / 2;
   const step = cards.length > 1 ? cards[1].offsetLeft - cards[0].offsetLeft : 1;
   let pos = 0;
   cards.forEach((c, j) => {
@@ -75,6 +75,10 @@ function updateCards() {
     c.style.setProperty('--shift', `${Math.max(-1, Math.min(1, off)) * 28}px`);
     if (Math.abs(off) < 0.5) pos = j - off;
   });
+  // Plan bar follows the drag: blend between the two cards either side of centre.
+  const p = Math.max(0, Math.min(cards.length - 1, pos));
+  const a = Math.floor(p), b = Math.min(cards.length - 1, a + 1);
+  drawBar(a, b, p - a);
   box.querySelectorAll('.type').length && document.querySelectorAll('#dots span').forEach((dot, j) => {
     const t = Math.max(0, 1 - Math.abs(pos - j));
     dot.style.width = `${0.45 + 0.95 * t}rem`;
@@ -87,12 +91,14 @@ window.addEventListener('resize', queueCards);
 function centreCard(id, smooth = true) {
   const el = document.querySelector(`.type[data-id="${id}"]`);
   const box = $('types');
-  box.scrollTo({ left: el.offsetLeft - (box.clientWidth - el.offsetWidth) / 2, behavior: smooth ? 'smooth' : 'instant' });
+  // Layout offset relative to the scroller, unaffected by the cards' live transforms.
+  const left = el.offsetLeft - box.offsetLeft;
+  box.scrollTo({ left: left + el.offsetWidth / 2 - box.clientWidth / 2, behavior: smooth ? 'smooth' : 'instant' });
 }
 
 function pickCentred() {
   const box = $('types');
-  const mid = box.scrollLeft + box.clientWidth / 2;
+  const mid = box.scrollLeft + box.offsetLeft + box.clientWidth / 2;
   let best = null, dist = Infinity;
   document.querySelectorAll('.type').forEach((b) => {
     const d = Math.abs(b.offsetLeft + b.offsetWidth / 2 - mid);
@@ -112,16 +118,67 @@ function renderLength() {
   $('plus').disabled = value >= L.max;
   $('splitRow').hidden = state.mode !== 'distance';
   $('split').setAttribute('aria-invalid', parseSplit(state.split) === null);
-  $('planMeta').textContent = state.mode === 'distance'
-    ? `About ${fmt(planTotal(plan))}`
-    : `${plan.length} intervals`;
+  if (state.mode === 'distance') { metaTimers.forEach(clearTimeout); shownCount = null; $('planMeta').textContent = `About ${fmt(planTotal(plan))}`; }
+  else tickCount(plan.length);
+}
+
+// "N intervals" steps one at a time to a new count, then pops, like the rate.
+let shownCount = null, metaTimers = [];
+function tickCount(to) {
+  const el = $('planMeta'), from = shownCount;
+  const label = (n) => `${n} intervals`;
+  metaTimers.forEach(clearTimeout); metaTimers = [];
+  shownCount = to;
+  if (from === null || from === to || matchMedia('(prefers-reduced-motion: reduce)').matches) { el.textContent = label(to); return; }
+  const n = Math.abs(to - from), dir = Math.sign(to - from), T = Math.min(500, 30 * n + 150);
+  for (let k = 1; k <= n; k++) metaTimers.push(setTimeout(() => { el.textContent = label(from + dir * k); }, (k * T) / n));
+  metaTimers.push(setTimeout(() => popEl(el), Math.max(0, T - 120)));
+}
+function popEl(el) {
+  el.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.15)', offset: 0.35 }, { transform: 'scale(1)' }],
+    { duration: 420, easing: 'cubic-bezier(.2,.9,.3,1.4)' });
+}
+
+// Plans for every session at the chosen length, so the bar can morph between
+// neighbouring cards while you swipe. Each plan is spread over the same number of
+// slots; slots a plan doesn't use have zero width, so segments split and merge.
+let allPlans = [], slotPlans = [];
+const hexRgb = (h) => [1, 3, 5].map((k) => parseInt(h.slice(k, k + 2), 16));
+
+function buildSlots() {
+  const T = Math.max(600, targetSeconds());
+  allPlans = TYPES.map((t) => buildPlan(t.id, T));
+  const N = Math.max(...allPlans.map((p) => p.length));
+  slotPlans = allPlans.map((p) => {
+    const slots = Array.from({ length: N }, () => null);
+    p.forEach((seg, j) => { slots[p.length === 1 ? 0 : Math.round((j * (N - 1)) / (p.length - 1))] = seg; });
+    let kind = p[0].kind;
+    return slots.map((seg) => {
+      if (seg) kind = seg.kind;
+      return { w: seg ? seg.dur : 0, c: hexRgb(KIND[kind].bg) };
+    });
+  });
+  const strip = $('strip');
+  if (strip.children.length !== N) strip.innerHTML = '<span></span>'.repeat(N);
+}
+
+function drawBar(a, b, t) {
+  const A = slotPlans[a], B = slotPlans[b];
+  if (!A || !B) return;
+  [...$('strip').children].forEach((el, k) => {
+    const w = A[k].w + (B[k].w - A[k].w) * t;
+    el.style.flex = `${w} 0 0`;
+    el.style.display = w < 0.5 ? 'none' : '';
+    el.style.background = `rgb(${A[k].c.map((v, q) => Math.round(v + (B[k].c[q] - v) * t)).join(',')})`;
+  });
 }
 
 function renderPlan() {
-  plan = buildPlan(state.type, Math.max(600, targetSeconds()));
+  buildSlots();
+  const idx = TYPES.findIndex((t) => t.id === state.type);
+  plan = allPlans[idx];
   const total = planTotal(plan);
-  $('strip').innerHTML = plan.map((s) =>
-    `<span style="flex:${s.dur};background:${KIND[s.kind].bg}"></span>`).join('');
+  drawBar(idx, idx, 0);
   let at = 0;
   $('planList').innerHTML = plan.map((s) => {
     const row = `<li><span class="p-at">${fmt(at)}</span><span class="p-dot" style="background:${KIND[s.kind].bg}"></span>
@@ -212,18 +269,37 @@ document.addEventListener('visibilitychange', () => {
 // ---------- Workout engine ----------
 let run = null, raf = 0;
 
+function resetCountdown() {
+  $('centre').classList.remove('cd');
+  const cd = $('countdown');
+  cd.classList.remove('leaving');
+  cd.setAttribute('aria-hidden', 'true');
+  ['cdNum', 'cdName', 'cdRate', 'cdUnit'].forEach((id) => { $(id).textContent = ''; });
+  $('cdNum').classList.remove('pop', 'go');
+  $('cdFlash').classList.remove('on');
+  $('cdBar').style.width = '0';
+}
+// Drop one-shot animation classes once they've played. A class left behind would replay
+// its animation the next time the rowing screen is shown.
+['spm', 'segLeft', 'cdNum', 'cdFlash'].forEach((id) => {
+  $(id).addEventListener('animationend', (e) => e.currentTarget.classList.remove('pop', 'go', 'on'));
+});
+// Once the exit animation has played, drop the class so the panel is fully hidden again.
+$('countdown').addEventListener('animationend', (e) => {
+  if (e.animationName === 'cd-out') $('countdown').classList.remove('leaving');
+});
+
 function startRun() {
   const segs = plan.map((s) => ({ ...s }));
   const starts = []; let acc = 0;
   segs.forEach((s) => { starts.push(acc); acc += s.dur; });
-  run = { segs, starts, total: acc, elapsed: 0, last: performance.now(), paused: false, phase: 0, idx: -1, txt: {}, cd: false, goUntil: 0,
+  run = { segs, starts, total: acc, elapsed: 0, last: performance.now(), paused: false, phase: 0, idx: -1, txt: {}, cd: false, clockAnim: null,
     rowedBy: segs.map(() => 0), startedAt: new Date().toISOString(), type: state.type, mode: state.mode,
     target: state.mode === 'time' ? `${state.minutes} min` : `${state.meters} m` };
   $('ticks').innerHTML = starts.slice(1).map((t) => `<span style="left:${(t / acc) * 100}%"></span>`).join('');
   $('pause').textContent = 'Pause';
-  $('centre').classList.remove('cd');
-  $('countdown').classList.remove('leaving');
-  $('countdown').setAttribute('aria-hidden', 'true');
+  resetCountdown();
+  shownRate = null;
   show('row');
   holdWake();
   cancelAnimationFrame(raf);
@@ -236,17 +312,43 @@ const idxAt = (t) => {
   return i;
 };
 
+// Rate change between intervals: step one stroke at a time, then pop.
+// The pop starts just before the last step so its swell peaks as the final number lands.
+// Short enough that the rate, clock, colour and panel exit all land together.
+const TICK_MS = 500, POP_LEAD_MS = 150;
+let tickTimers = [], shownRate = null;
+function tickRate(to) {
+  const el = $('spm');
+  tickTimers.forEach(clearTimeout); tickTimers = [];
+  const from = shownRate;
+  shownRate = to;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (from === null || from === to || reduce) { el.textContent = to; return; }
+  const steps = Math.abs(to - from), dir = Math.sign(to - from), each = TICK_MS / steps;
+  for (let k = 1; k <= steps; k++) tickTimers.push(setTimeout(() => { el.textContent = from + dir * k; }, k * each));
+  tickTimers.push(setTimeout(() => {
+    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+  }, Math.max(0, TICK_MS - POP_LEAD_MS)));
+}
+
+// Interval clock: count up to the new interval's time in 15-second ticks, then pop.
+// Starts on the switch, as the countdown panel bursts out.
+function startClockTick() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  run.clockAnim = { t0: performance.now(), popped: false };
+}
+
 function enterSeg(i) {
   run.idx = i;
   const s = run.segs[i], k = KIND[s.kind];
-  if (run.cd && run.goUntil <= run.elapsed) run.goUntil = run.elapsed + 0.9 * 60 / s.spm;
+  startClockTick();
   const row = $('row');
   row.style.setProperty('--bg', k.bg);
   row.style.setProperty('--fg', k.ink);
   document.querySelector('meta[name="theme-color"]').content = k.bg;
   document.documentElement.style.backgroundColor = k.bg;
   $('segName').textContent = s.name;
-  $('spm').textContent = s.spm;
+  tickRate(s.spm);
   const next = run.segs[i + 1];
   $('nextName').textContent = next ? next.name : 'Finish';
 }
@@ -265,17 +367,34 @@ function tick(now) {
   const wall = (now - run.last) / 1000;
   run.last = now;
   const seg = run.segs[Math.max(0, run.idx)];
+  let caught = false;
   if (!run.paused) {
     if (run.idx >= 0) run.rowedBy[run.idx] += Math.min(wall, run.total - run.elapsed);
     run.elapsed += wall;
-    run.phase = (run.phase + dt * (seg?.spm || 20) / 60) % 1;
+    const ph = run.phase + dt * (seg?.spm || 20) / 60;
+    caught = ph >= 1;                     // a catch happened this frame
+    run.phase = ph % 1;
   }
   if (run.elapsed >= run.total) { finish(true); return; }
 
-  const i = idxAt(run.elapsed);
-  if (i !== run.idx) enterSeg(i);
+  // Interval switches snap to the catch nearest the planned boundary, so every
+  // new rate starts on a fresh stroke. The next interval absorbs the difference
+  // (under half a stroke), so the session still ends on time.
+  if (run.idx < 0) enterSeg(0);
+  else {
+    const cur = run.idx, last = run.segs.length - 1;
+    const end = run.starts[cur + 1] ?? run.total;
+    const P0 = 60 / run.segs[cur].spm;
+    if (cur < last && caught && end - run.elapsed < P0 / 2) {
+      run.starts[cur + 1] = run.elapsed;
+      enterSeg(cur + 1);
+    } else if (cur < last && run.elapsed - end > P0) {
+      enterSeg(idxAt(run.elapsed));        // tab was frozen: catch up by time
+    }
+  }
+  const i = run.idx;
   const s = run.segs[i];
-  const segEnd = run.starts[i] + s.dur;
+  const segEnd = run.starts[i + 1] ?? run.total;
   const rem = segEnd - run.elapsed;
 
   // Stroke cue
@@ -285,23 +404,30 @@ function tick(now) {
   $('row').style.setProperty('--x', x.toFixed(4));
 
   // Metrics
-  setText('segLeft', fmt(Math.ceil(rem)));
+  let clockShown = Math.ceil(rem);
+  const ca = run.clockAnim;
+  if (ca) {
+    const t = now - ca.t0;
+    if (!ca.popped && t >= TICK_MS - POP_LEAD_MS) {
+      ca.popped = true;
+      const el = $('segLeft'); el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+    }
+    if (t >= TICK_MS) run.clockAnim = null;
+    else clockShown = Math.min(clockShown, Math.floor((t / TICK_MS) * Math.ceil(clockShown / 15)) * 15);
+  }
+  setText('segLeft', fmt(clockShown));
   setText('totalLeft', fmt(Math.ceil(run.total - run.elapsed)));
   setText('elapsed', fmt(run.elapsed));
   $('progFill').style.width = `${(run.elapsed / run.total) * 100}%`;
 
-  // Countdown to next interval, in strokes. Each number drops on a catch.
-  // The switch lands on the catch nearest the planned boundary, so the
-  // first stroke of the next interval starts exactly when "Go" shows.
+  // Countdown to next interval, in strokes: 4, 3, 2, 1, each dropping on a catch.
+  // "1" holds until the interval switches. The panel then bursts out on the same frame
+  // the colour, rate and clock change, so the move to the next interval is one beat.
   const P = 60 / s.spm;
   const toNextCatch = (1 - run.phase) * P;
-  const cx = (rem - toNextCatch) / P;         // catches until the boundary
-  // "Go" holds for about one stroke after the boundary catch, whichever side of the
-  // planned boundary that catch falls on.
-  if (cx < -0.5 && run.goUntil <= run.elapsed) run.goUntil = run.elapsed + 0.9 * P;
-  const go = run.elapsed < run.goUntil;
+  const cx = (rem - toNextCatch) / P;           // catches until the boundary
   const left = Math.max(1, Math.round(cx) + 1); // strokes left, current one included
-  const inCd = go || (cx >= -0.5 && left <= COUNTDOWN_STROKES);
+  const inCd = left <= COUNTDOWN_STROKES;
   if (inCd !== run.cd) {
     run.cd = inCd;
     $('centre').classList.toggle('cd', inCd);
@@ -318,17 +444,15 @@ function tick(now) {
     }
   }
   if (inCd) {
-    const label = go ? 'Go' : String(left);
+    const label = String(left);
     if (run.txt.cdNum !== label) {
       setText('cdNum', label);
       const n = $('cdNum');
-      n.classList.remove('pop', 'go'); void n.offsetWidth; n.classList.add(go ? 'go' : 'pop');
-      if (go) { const f = $('cdFlash'); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on'); }
-      $('cdUnit').textContent = go ? '' : left === 1 ? 'stroke' : 'strokes';
+      n.classList.remove('pop'); void n.offsetWidth; n.classList.add('pop');
+      $('cdUnit').textContent = left === 1 ? 'stroke' : 'strokes';
     }
-    // Strokes still to row as a continuous value: whole strokes left minus how far
-    // through the current stroke we are. It reaches 0 exactly on the boundary catch.
-    const remaining = go ? 0 : left - run.phase;
+    // Strokes still to row as a continuous value; full once the boundary catch has passed.
+    const remaining = cx < -0.5 ? 0 : left - run.phase;
     const done = 1 - remaining / COUNTDOWN_STROKES;
     $('cdBar').style.width = `${Math.min(1, Math.max(0, done)) * 100}%`;
   }
@@ -350,13 +474,45 @@ function finish(completed) {
   dropWake();
   const rec = sessionRecord(run, completed);
   if (rec.rowed >= 60) saveSession(rec);
-  $('dTime').textContent = fmt(rec.rowed);
-  $('dCount').textContent = `${rec.intervalsDone} of ${rec.intervals}`;
-  $('dHard').textContent = fmt(rec.hard);
   $('endSheet').hidden = true;
   $('pausedSheet').hidden = true;
+  resetCountdown();
   run = null;
   show('done');
+  playRecap(rec);
+}
+
+// Recap: title pops, then each row slides up and its value ticks up from zero and pops,
+// one row after another; the buttons arrive as the last number lands.
+const RECAP = { stagger: 70, tick: 350, lead: 120, slide: 12 };
+let recapTimers = [];
+function playRecap(rec) {
+  recapTimers.forEach(clearTimeout); recapTimers = [];
+  const rows = [
+    ['dTime', Math.floor(rec.rowed / 60), (v) => fmt(v * 60), fmt(rec.rowed)],
+    ['dCount', rec.intervalsDone, (v) => `${v} of ${rec.intervals}`, `${rec.intervalsDone} of ${rec.intervals}`],
+    ['dHard', Math.floor(rec.hard / 60), (v) => fmt(v * 60), fmt(rec.hard)],
+  ];
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { rows.forEach(([id, , , fin]) => { $(id).textContent = fin; }); return; }
+  const { stagger: G, tick: K, lead: L, slide: D } = RECAP;
+  const ease = 'cubic-bezier(.25,1,.5,1)';
+  document.querySelector('.done-title').animate(
+    [{ opacity: 0, transform: 'scale(.6)' }, { opacity: 1, transform: 'scale(1.06)', offset: 0.6 }, { opacity: 1, transform: 'scale(1)' }],
+    { duration: 320, easing: ease, fill: 'backwards' });
+  const rowEls = document.querySelectorAll('.done-stats > div');
+  rows.forEach(([id, n, f, fin], k) => {
+    const el = $(id), delay = G * (k + 1);
+    el.textContent = f(0);
+    rowEls[k].animate([{ opacity: 0, transform: `translateY(${D}px)` }, { opacity: 1, transform: 'none' }],
+      { duration: 200, delay, easing: ease, fill: 'backwards' });
+    recapTimers.push(setTimeout(() => {
+      if (!n) { el.textContent = fin; popEl(el); return; }
+      for (let q = 1; q <= n; q++) recapTimers.push(setTimeout(() => { el.textContent = q === n ? fin : f(q); }, (q * K) / n));
+      recapTimers.push(setTimeout(() => popEl(el), Math.max(0, K - L)));
+    }, delay));
+  });
+  document.querySelector('.done-actions').animate([{ opacity: 0, transform: `translateY(${D / 2}px)` }, { opacity: 1, transform: 'none' }],
+    { duration: 220, delay: G * 3 + K - L, easing: 'ease-out', fill: 'backwards' });
 }
 
 // ---------- History ----------
@@ -480,7 +636,11 @@ $('pause').addEventListener('click', () => setPaused(!run.paused));
 $('resume').addEventListener('click', () => setPaused(false));
 $('skip').addEventListener('click', () => {
   if (!run) return;
-  run.elapsed = run.starts[run.idx + 1] ?? run.total;
+  const nextStart = run.starts[run.idx + 1];
+  if (nextStart === undefined) { run.elapsed = run.total; return; }
+  run.elapsed = Math.max(run.elapsed, nextStart);
+  run.phase = 0;                           // the new interval starts on a fresh stroke
+  enterSeg(run.idx + 1);
 });
 $('end').addEventListener('click', () => { $('endSheet').hidden = false; });
 $('endNo').addEventListener('click', () => { $('endSheet').hidden = true; });
