@@ -46,7 +46,7 @@ const targetSeconds = () => {
 function buildTypes() {
   $('types').innerHTML = TYPES.map((ty) => `
     <button type="button" class="type" role="radio" data-id="${ty.id}"
-      style="--cbg:${KIND[ty.kind].bg};--cfg:${KIND[ty.kind].ink}">
+      style="--cbg:${ty.cover.bg};--cfg:${ty.cover.ink}">
       <span class="t-top"><span class="t-rate">${rateText(ty.rate)}</span><span class="t-badge" aria-hidden="true">${t('bestFrom', { n: ty.xBelow })}</span></span>
       <span class="t-name">${typeName(ty.id)}</span>
       <span class="t-desc">${t(`desc.${ty.id}`)}</span>
@@ -640,7 +640,7 @@ function renderHistory() {
     : t('noSessions');
   $('histList').innerHTML = list.map((x) => {
     const d = new Date(x.startedAt);
-    const color = KIND[(TYPES.find((t) => t.id === x.type) || { kind: 'steady' }).kind].bg;
+    const color = (TYPES.find((ty) => ty.id === x.type) || TYPES[0]).cover.bg;
     return `<li>
       <span class="h-dot" style="background:${color}"></span>
       <span class="h-main"><span class="h-name">${TYPES.some((ty) => ty.id === x.type) ? typeName(x.type) : x.session}</span>

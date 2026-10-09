@@ -4,6 +4,7 @@
 // length limits and a rate per fitness level.
 // PHRASES combine words by fixed rules: warm-up, main set, cool-down.
 // SENTENCES are the sessions: which phrases, with which words.
+// Each session has its own cover colour, from cool to hot by intensity.
 //
 // Spare time is always used in the same order:
 //   1. stretch the work words within their limits
@@ -44,7 +45,7 @@ export const WORDS = {
   sprint:    { name: 'Sprint',       kind: 'work',   pressure: 'maximum',  len: [15, 30], reps: [20, 30], express: [20, 20],
                rate: { recreational: 32, club: 36, competitive: 40 }, max: 15, set: 5,
                recover: (r) => 4 * r, setRecover: 3 * M },
-  rung:      { name: 'Rung',         kind: 'steady', pressure: 'moderate, held constant', len: [45, 4 * M], from: 'steady', step: 2, count: 5 },
+  rung:      { name: 'Rung',         kind: 'steady', pressure: 'moderate, held constant', len: [45, 5 * M], from: 'steady', step: 2, count: 5 },
   recover:   { name: 'Recover',      kind: 'rest',   pressure: 'light',    rate: { recreational: 18, club: 18, competitive: 18 } },
   cool:      { name: 'Cool-down',    kind: 'cool',   pressure: 'light',    len: [2 * M, 8 * M], rate: { recreational: 18, club: 18, competitive: 18 } },
 };
@@ -56,14 +57,14 @@ const hi = (w, L) => { const r = WORDS[w].rate[L]; return Array.isArray(r) ? r[1
 // warm: 'short' (no Firm strokes), 'standard' (no Firm strokes), 'firm' (ends on Firm strokes), 'easy' (Easy only)
 // xBelow: length in minutes under which the session uses its Express limits.
 export const TYPES = [
-  { id: 'steady',    kind: 'steady', name: 'Steady state',  desc: 'Long, easy aerobic base.',               warm: 'short',    xBelow: 0 },
-  { id: 'tempo',     kind: 'steady', name: 'Tempo',         desc: 'Sustained and comfortably hard.',        warm: 'standard', xBelow: 20 },
-  { id: 'threshold', kind: 'work',   name: 'Threshold',     desc: 'Long reps just under race effort.',      warm: 'firm',     xBelow: 30 },
-  { id: 'vo2',       kind: 'work',   name: '2k pace',       desc: 'Race-rhythm reps with equal rest.',      warm: 'firm',     xBelow: 30 },
-  { id: 'power',     kind: 'work',   name: 'Power sprints', desc: 'Short bursts with full recovery.',       warm: 'firm',     xBelow: 25 },
-  { id: 'pyramid',   kind: 'work',   name: 'Pyramid',       desc: 'Pieces build up, then step down.',       warm: 'firm',     xBelow: 25 },
-  { id: 'ladder',    kind: 'steady', name: 'Rate ladder',   desc: 'Same pressure, two strokes up each rung.', warm: 'standard', xBelow: 15 },
-  { id: 'recovery',  kind: 'cool',   name: 'Recovery',      desc: 'Light paddle to flush the legs.',        warm: 'easy',     xBelow: 0 },
+  { id: 'steady',    kind: 'steady', name: 'Steady state',  desc: 'Long, easy aerobic base.',               warm: 'short',    xBelow: 0, cover: { bg: '#2EC4B6', ink: '#04201D' } },
+  { id: 'tempo',     kind: 'steady', name: 'Tempo',         desc: 'Sustained and comfortably hard.',        warm: 'standard', xBelow: 20, cover: { bg: '#FFD23F', ink: '#2A2000' } },
+  { id: 'threshold', kind: 'work',   name: 'Threshold',     desc: 'Long reps just under race effort.',      warm: 'firm',     xBelow: 30, cover: { bg: '#FF7A45', ink: '#2A0F00' } },
+  { id: 'vo2',       kind: 'work',   name: '2k pace',       desc: 'Race-rhythm reps with equal rest.',      warm: 'firm',     xBelow: 30, cover: { bg: '#FF3B5C', ink: '#2A0008' } },
+  { id: 'power',     kind: 'work',   name: 'Power sprints', desc: 'Short bursts with full recovery.',       warm: 'firm',     xBelow: 25, cover: { bg: '#D93A8E', ink: '#22000F' } },
+  { id: 'pyramid',   kind: 'work',   name: 'Pyramid',       desc: 'Pieces build up, then step down.',       warm: 'firm',     xBelow: 25, cover: { bg: '#FF7EB3', ink: '#2A0016' } },
+  { id: 'ladder',    kind: 'steady', name: 'Rate ladder',   desc: 'Same pressure, two strokes up each rung.', warm: 'standard', xBelow: 15, cover: { bg: '#3DD68C', ink: '#04260F' } },
+  { id: 'recovery',  kind: 'cool',   name: 'Recovery',      desc: 'Light paddle to flush the legs.',        warm: 'easy',     xBelow: 0, cover: { bg: '#B9A6FF', ink: '#1B1433' } },
 ];
 
 // Rate label for a session card at a fitness level.
@@ -152,13 +153,9 @@ function warmPhrase(style, total, mainRate, L) {
 }
 
 // ---------- Cool-down phrase ----------
-// Easy rowing at 18, easing to 16 for the second half once it's 4 minutes or more.
-// The cool-down never goes back up after a lower-rate finish, as in Recovery.
 function coolPhrase(total, L, before) {
-  const start = Math.min(lo('cool', L), before);
-  if (total < 4 * M || start <= 16) return [seg('cool', start, total)];
-  const a = r15(total / 2);
-  return [seg('cool', start, a), seg('cool', 16, total - a)];
+  // One Cool-down interval; it never goes back up after a lower-rate finish, as in Recovery.
+  return [seg('cool', Math.min(lo('cool', L), before), total)];
 }
 
 // ---------- Main phrases ----------
@@ -226,7 +223,7 @@ function pyramid(main, L) {
 }
 
 // Ladder: Rung intervals rising by 2 spm from Steady's high rate, at constant pressure.
-// Rungs run 45 seconds to 4 minutes. A second climb is added once its rungs would be
+// Rungs run 45 seconds to 5 minutes. A second climb is added once its rungs would be
 // 2:30 or more, with Recover between climbs.
 function ladder(main, L) {
   const R = WORDS.rung, start = hi('steady', L);
@@ -243,17 +240,40 @@ function ladder(main, L) {
 }
 
 // ---------- Composition ----------
+// First rate of each session's main set, used to size the warm-up before the set exists.
+const MAIN_RATE = {
+  steady: (L) => lo('steady', L), tempo: (L) => lo('tempo', L), threshold: (L) => lo('threshold', L),
+  vo2: (L) => lo('race', L), power: (L) => lo('sprint', L), pyramid: (L) => hi('race', L),
+  ladder: (L) => hi('steady', L), recovery: (L) => lo('easy', L),
+};
+const COOL_MAX = { easy: 3 * M, short: 3 * M, standard: 5 * M, firm: 8 * M };
+
+// The most a warm-up can hold with every word at its upper limit. A warm-up never
+// gets more than this, so it never has to spill time into easy filler.
+function warmCapacity(style, mainRate, L) {
+  if (style === 'easy') return WORDS.easy.len[1];
+  const firm = style === 'firm';
+  const ceil = firm ? Math.min(lo('firm', L), mainRate) : mainRate;
+  let builds = 0;
+  for (let r = WORDS.build.from; r < ceil; r += WORDS.build.step) builds++;
+  return WORDS.pick.len[1] + builds * WORDS.build.len[1] + (firm ? WORDS.firm.len[1] + 2 * M : 0);
+}
+
 export function buildPlan(id, T, L = 'recreational') {
   const type = TYPES.find((t) => t.id === id);
   const x = T < type.xBelow * M;
   const style = type.warm;
-  const warmT = warmLength(style, T, x);
-  const coolT = coolLength(style, T, x);
-  let main = T - warmT - coolT;
+  const cap = warmCapacity(style, MAIN_RATE[id](L), L);
+  const warmT = Math.min(warmLength(style, T, x), cap);
+  const coolT = Math.min(coolLength(style, T, x), COOL_MAX[style]);
+  const main = T - warmT - coolT;
 
   let set, spare = 0;
   if (id === 'steady') set = continuous('steady', main, L, x);
-  else if (id === 'recovery') set = continuous('easy', main, L, x).map((s) => ({ ...s, kind: 'steady' }));
+  else if (id === 'recovery') {
+    // Starts on the lower rate, so the main set reads apart from the easy warm-up.
+    set = continuous('easy', main, L, x).map((sg, i) => ({ ...sg, kind: 'steady', spm: i % 2 ? lo('easy', L) : hi('easy', L) }));
+  }
   else if (id === 'tempo') {
     const over = Math.max(0, main - WORDS.tempo.cap);
     set = continuous('tempo', main - over, L, x);
@@ -264,14 +284,33 @@ export function buildPlan(id, T, L = 'recreational') {
   else if (id === 'pyramid') ({ set, spare } = pyramid(main, L));
   else if (id === 'ladder') ({ set, spare } = ladder(main, L));
 
-  // Spare time: a Steady block if it's 5 minutes or more, otherwise warm-up and cool-down.
-  let steadyBlock = null, warmExtra = 0, coolExtra = 0;
-  if (spare >= 5 * M && style !== 'easy') steadyBlock = seg('steady', lo('steady', L), spare);
-  else if (spare > 0) { coolExtra = Math.min(spare / 2, WORDS.cool.len[1] - coolT); warmExtra = spare - coolExtra; }
+  // Spare time: a Steady block if it's 5 minutes or more. Otherwise it lengthens the
+  // warm-up and cool-down up to their limits, and anything beyond goes back into the
+  // main set (longer blocks, or longer Recover between efforts).
+  let steadyBlock = null, warmExtra = 0, coolExtra = 0, back = 0;
+  // Long Steady time is split into blocks within Steady's limits, alternating its rates.
+  if (spare >= 5 * M && style !== 'easy') steadyBlock = continuous('steady', spare, L, false);
+  else if (spare > 0) {
+    warmExtra = Math.min(spare, cap - warmT);
+    coolExtra = Math.min(spare - warmExtra, COOL_MAX[style] - coolT);
+    back = spare - warmExtra - coolExtra;
+  }
+  if (back > 0) {
+    const rests = set.filter((sg) => sg.word === 'recover');
+    if (rests.length) rests.forEach((sg) => { sg.dur += back / rests.length; });
+    else if (id === 'tempo') {
+      // Tempo is at its cap, so the extra can't be more Tempo: it becomes a 5-minute
+      // Steady block, borrowing the difference from the Tempo blocks.
+      const borrow = 5 * M - back;
+      set.forEach((sg) => { sg.dur -= borrow / set.length; });
+      steadyBlock = [seg('steady', lo('steady', L), 5 * M)];
+    } else set.forEach((sg) => { sg.dur += back / set.length; });
+  }
 
   const mainRate = set[0].spm;
   const warm = warmPhrase(style, warmT + warmExtra, mainRate, L);
-  const segs = [...warm.head, ...(steadyBlock ? [steadyBlock] : []), ...warm.tail, ...set, ...coolPhrase(coolT + coolExtra + (warm.spill || 0), L, set[set.length - 1].spm)];
+  const segs = [...warm.head, ...(steadyBlock || []), ...warm.tail, ...set,
+    ...coolPhrase(coolT + coolExtra + (warm.spill || 0), L, set[set.length - 1].spm)];
   return fit(segs, T, x);
 }
 
