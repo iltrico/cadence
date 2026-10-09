@@ -25,9 +25,10 @@ const M = 60;
 
 // ---------- Words ----------
 // rate: spm per level, as a single value or [low, high] for words that alternate or progress.
+// countdown: false for words too short or too focused to show the 4-stroke countdown at their end.
 // len: absolute limits in seconds. reps / express: preferred rep lengths for repeats.
 export const WORDS = {
-  pick:      { name: 'Pick drill',   kind: 'drill',   pressure: 'light',    len: [2 * M, 3 * M], detail: 'stages',
+  pick:      { name: 'Pick drill',   kind: 'drill',   pressure: 'light',    len: [2 * M, 3 * M], detail: 'stages', countdown: false,
                stages: ['armsOnly', 'armsBody', 'halfSlide', 'fullSlide'],   rate: { recreational: 18, club: 18, competitive: 18 } },
   easy:      { name: 'Easy',         kind: 'warm',   pressure: 'light',    len: [M, 20 * M],      rate: { recreational: [18, 16], club: [18, 16], competitive: [18, 16] } },
   build:     { name: 'Build',        kind: 'warm',   pressure: 'light to moderate', len: [M, 3 * M], from: 20, step: 2 },
@@ -41,7 +42,7 @@ export const WORDS = {
   race:      { name: 'Race pace',    kind: 'work',   pressure: 'very hard', len: [45, 5 * M], reps: [3 * M, 5 * M], express: [M, 90],
                rate: { recreational: [28, 28], club: [30, 32], competitive: [32, 34] }, cap: 20 * M, max: 6,
                recover: (r) => r },
-  sprint:    { name: 'Sprint',       kind: 'work',   pressure: 'maximum',  len: [15, 30], reps: [20, 30], express: [20, 20],
+  sprint:    { name: 'Sprint',       kind: 'work',   pressure: 'maximum',  len: [15, 30], countdown: false, reps: [20, 30], express: [20, 20],
                rate: { recreational: 32, club: 36, competitive: 40 }, max: 15, set: 5,
                recover: (r) => 4 * r, setRecover: 3 * M },
   rung:      { name: 'Rung',         kind: 'steady', pressure: 'moderate, held constant', len: [45, 5 * M], from: 'steady', step: 2, count: 5 },

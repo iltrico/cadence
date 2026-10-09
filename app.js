@@ -500,8 +500,9 @@ function tick(now) {
   const toNextCatch = (1 - run.phase) * P;
   const cx = (rem - toNextCatch) / P;           // catches until the boundary
   const left = Math.max(1, Math.round(cx) + 1); // strokes left, current one included
-  // Drills show their own progress in the stage bar, so they skip the countdown.
-  const inCd = left <= COUNTDOWN_STROKES && $('row').dataset.mode !== 'stages';
+  // Some words skip the countdown at their end: drills show progress in the stage bar,
+  // and sprints are too short to share the screen with it.
+  const inCd = left <= COUNTDOWN_STROKES && WORDS[s.word]?.countdown !== false;
   if (inCd !== run.cd) {
     run.cd = inCd;
     $('centre').classList.toggle('cd', inCd);
