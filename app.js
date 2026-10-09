@@ -406,7 +406,7 @@ function showSeg(i, how = {}) {
   if (mode === 'stages') {
     run.stage = -1;
     layoutStages(WORDS[s.word].stages.length);
-    shownRate = s.spm;   // the rate ticks up from the drill's rate when the cue returns
+    shownRate = null;   // when the cue returns, its rate simply appears, with no count
   } else tickRate(s.spm);
   const next = run.segs[i + 1];
   $('nextName').textContent = next ? wordName(next) : t('finish');
@@ -461,6 +461,7 @@ function fuseToRhythm(how) {
   row.classList.add('fusing');
   run.fuse = { t0: performance.now(), fromX, landing: !!how.landing, L0, w, W, P };
   const name = $('segName'); name.classList.remove('pop'); void name.offsetWidth; name.classList.add('pop');
+  const rate = $('spm'); rate.classList.remove('pop'); void rate.offsetWidth; rate.classList.add('pop');
   const puck = $('puck'); puck.classList.remove('pop-in'); void puck.offsetWidth; puck.classList.add('pop-in');
 }
 
