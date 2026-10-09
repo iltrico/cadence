@@ -1,5 +1,5 @@
 // Offline-first cache. Bump VERSION after each deploy so phones pick up changes.
-const VERSION = 'cadence-v34';
+const VERSION = 'cadence-v35';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './plan.js', './i18n.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png',

@@ -97,13 +97,8 @@ input { user-select: text; -webkit-user-select: text; }
 .dots { display: flex; justify-content: center; gap: 0.4rem; margin-top: -0.25rem; }
 .dots span { width: 0.45rem; height: 0.45rem; border-radius: 999px; background: var(--line); }
 
-.toggle { display: inline-flex; background: #E3E7F0; border-radius: 999px; padding: 4px; }
-.toggle button {
-  border: 0; background: none; padding: 0.5rem 1.1rem; border-radius: 999px; font-weight: 600;
-}
-.toggle button[aria-checked="true"] { background: var(--ink); color: var(--paper); }
 
-.length { display: grid; justify-items: center; gap: 0.5rem; }
+.length { display: grid; justify-items: center; gap: 0.5rem; padding: var(--s24) 0; }   /* breathing room around the length */
 .stepper { width: 100%; display: flex; align-items: center; justify-content: space-between; }
 .round:disabled { opacity: 0.3; }
 .round {
@@ -366,8 +361,6 @@ input { user-select: text; -webkit-user-select: text; }
 .type { border-radius: var(--r-card); padding: var(--s20) var(--s24) var(--s24); gap: var(--s4); }
 .countdown { border-radius: var(--r-card); padding: var(--s24) var(--s24) var(--s32); }
 .sheet-card { border-radius: var(--r-card); padding: var(--s24); gap: var(--s12); }
-.toggle { padding: var(--s4); }
-.toggle button { padding: var(--s8) var(--s16); }
 .pill { padding: var(--s8) var(--s16); }
 .ctl { padding: var(--s16) var(--s8); }
 .start, .ghost { padding: var(--s16) var(--s24); }

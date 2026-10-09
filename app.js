@@ -18,7 +18,7 @@ const LIMITS = {
 const saved = (() => { try { return JSON.parse(localStorage.getItem('cadence') || '{}'); } catch { return {}; } })();
 const state = {
   type: saved.type || 'steady',
-  mode: saved.mode || 'time',
+  mode: 'time',   // length is always set in minutes
   minutes: saved.minutes || 30,
   meters: saved.meters || 6000,
   split: saved.split || '2:10',
@@ -122,14 +122,10 @@ function pickCentred() {
 function renderLength() {
   const L = LIMITS[state.mode];
   const value = state.mode === 'time' ? state.minutes : state.meters;
-  document.querySelectorAll('.toggle button').forEach((b) => b.setAttribute('aria-checked', b.dataset.mode === state.mode));
   const shown = state.mode === 'time' ? value : value.toLocaleString(LOCALE);
   $('amount').innerHTML = `${shown}<small>${t(L.unit)}</small>`;
-  $('amount').classList.toggle('long', state.mode === 'distance');
   $('minus').disabled = value <= L.min;
   $('plus').disabled = value >= L.max;
-  $('splitRow').hidden = state.mode !== 'distance';
-  $('split').setAttribute('aria-invalid', parseSplit(state.split) === null);
 }
 
 function popEl(el) {
@@ -244,21 +240,11 @@ $('types').addEventListener('keydown', (e) => {
   state.type = TYPES[n].id; refresh(); centreCard(state.type);
   document.querySelector(`.type[data-id="${state.type}"]`).focus({ preventScroll: true });
 });
-document.querySelector('.toggle').addEventListener('click', (e) => {
-  const b = e.target.closest('button'); if (!b) return;
-  state.mode = b.dataset.mode; renderPlan(true); renderTypes(); renderLength(); persist();
-});
 $('minus').addEventListener('click', () => setValue((state.mode === 'time' ? state.minutes : state.meters) - LIMITS[state.mode].step));
 $('plus').addEventListener('click', () => setValue((state.mode === 'time' ? state.minutes : state.meters) + LIMITS[state.mode].step));
 $('planBtn').addEventListener('click', () => { $('planSheet').hidden = false; });
 $('planClose').addEventListener('click', () => { $('planSheet').hidden = true; });
 $('planSheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.hidden = true; });
-$('split').addEventListener('input', (e) => {
-  state.split = e.target.value;
-  if (parseSplit(state.split) !== null) { renderPlan(true); renderTypes(); persist(); }
-  renderLength();
-});
-$('split').value = state.split;
 
 // ---------- Screens ----------
 function show(id) {
