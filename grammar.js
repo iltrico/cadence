@@ -3,7 +3,7 @@
 // how the planner builds a plan, so a planner change that breaks a rule fails loudly.
 // Used by test.mjs during development; the app itself doesn't need it.
 
-import { WORDS, TYPES, LEVELS } from './plan.js';
+import { WORDS, TYPES, LEVELS, MODULE_TRANSITIONS, moduleOf } from './plan.js';
 
 const M = 60;
 const range = (w, L) => { const r = WORDS[w].rate?.[L]; return Array.isArray(r) ? [Math.min(...r), Math.max(...r)] : [r, r]; };
@@ -98,7 +98,13 @@ export function validatePlan(plan, id, T, L = 'recreational') {
     if (w === 'firm' ? s.spm > b : (s.spm < a || s.spm > b)) fail(`rate ${s.spm} outside ${a}–${b}`, i);
   });
 
-  // 10. Express flag matches the length.
+  // 10. Every change of display module has a designed transition.
+  for (let i = 1; i < plan.length; i++) {
+    const a = moduleOf(plan[i - 1].word), b = moduleOf(plan[i].word);
+    if (a !== b && !MODULE_TRANSITIONS.includes(`${a}>${b}`)) fail(`no designed transition from ${a} to ${b}`, i);
+  }
+
+  // 11. Express flag matches the length.
   if (!!plan.express !== (T < type.xBelow * M)) fail('Express flag does not match the length');
 
   return errors;

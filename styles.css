@@ -408,9 +408,19 @@ input { user-select: text; -webkit-user-select: text; }
 #row[data-mode="stages"] .rail, #row[data-mode="stages"] .rate { visibility: hidden; }
 .mod-in  { visibility: visible !important; animation: cd-in 340ms cubic-bezier(.25,1,.5,1) both; }
 .mod-out { visibility: visible !important; animation: cd-out 340ms cubic-bezier(.5,0,.75,0) both; }
-.stage-bar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s8); align-self: center; }
-.stage-bar span { position: relative; height: 2.5rem; border-radius: var(--r-pill); overflow: hidden; box-shadow: inset 0 0 0 2px var(--fg); }
-.stage-bar i { position: absolute; inset: 0; width: 0; background: var(--fg); }
+.stage-bar { position: relative; height: 2.5rem; align-self: center; z-index: 1; }
+.stage-bar span { position: absolute; top: 0; bottom: 0; border-radius: var(--r-pill); overflow: hidden; box-shadow: inset 0 0 0 2px var(--fg); }
+.stage-bar span.bare { box-shadow: none; }
+.stage-bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--fg); }
+.stage-bar span.bare i { border-radius: var(--r-pill); }
+.puck { z-index: 2; }
+/* Fusing: the stage pills become the rhythm bar. One track outline, the pills' fill
+   flowing into the cursor; the rate and stage name have already swapped in place. */
+#row.fusing .stage-bar { visibility: visible; }
+#row.fusing .rail-fill { visibility: hidden; }
+.seg-name.pop { animation: rate-pop 420ms cubic-bezier(.2,.9,.3,1.4); display: inline-block; transform-origin: 0 70%; }
+.puck.pop-in { animation: puck-in 380ms cubic-bezier(.2,.9,.3,1.4); }
+@keyframes puck-in { 0% { transform: scale(0); } 55% { transform: scale(1.2); } 100% { transform: scale(1); } }
 .stage-text { margin: 0; }
 .stage-name { font-size: 2rem; font-weight: 800; line-height: 1; letter-spacing: -0.01em; display: inline-block; transform-origin: 0 70%; }  /* title/l */
 .stage-name.pop { animation: rate-pop 420ms cubic-bezier(.2,.9,.3,1.4); }
@@ -432,7 +442,7 @@ input { user-select: text; -webkit-user-select: text; }
   .row { padding-top: calc(0.75rem + env(safe-area-inset-top, 0px)); padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px)); }
   .seg-name { font-size: clamp(1.75rem, 6vw, 3rem); }
   .rate span { font-size: clamp(2rem, 7vw, 3.5rem); }
-  .rail, .stage-bar span { height: 2rem; }
+  .rail, .stage-bar { height: 2rem; }
     .stats dd { font-size: 1.3rem; }
   .seg-left { font-size: clamp(5rem, 18vw, 11rem); }
   .ctl { padding: 0.6rem 0.5rem; }
@@ -442,7 +452,7 @@ input { user-select: text; -webkit-user-select: text; }
   .row, .puck, .ticks span, .type .t-badge, .detail > * { transition: none; }
   .stage-name.pop { animation: none; }
   .types { scroll-behavior: auto; }
-  .cd-num.pop, .cd-num.go, .cd-flash.on, .rate span.pop, .seg-left.pop, .stage-name.pop, .mod-in, .mod-out { animation: none; }
+  .cd-num.pop, .cd-num.go, .cd-flash.on, .rate span.pop, .seg-left.pop, .stage-name.pop, .mod-in, .mod-out, .seg-name.pop, .puck.pop-in { animation: none; }
   .clock { transition: opacity 150ms linear; transform: none !important; }
   .centre.cd .countdown, .countdown.leaving { animation-duration: 1ms; }
 }

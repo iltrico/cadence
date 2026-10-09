@@ -50,6 +50,11 @@ export const WORDS = {
   cool:      { name: 'Cool-down',    kind: 'cool',   pressure: 'light',    len: [2 * M, 8 * M], rate: { recreational: 18, club: 18, competitive: 18 } },
 };
 
+// Module transitions with a designed animation, as 'from>to'. Any other change of module
+// falls back to a plain swap, and the grammar check flags plans that would need one.
+export const MODULE_TRANSITIONS = ['stages>rate'];
+export const moduleOf = (word) => WORDS[word]?.detail || 'rate';
+
 const lo = (w, L) => { const r = WORDS[w].rate[L]; return Array.isArray(r) ? r[0] : r; };
 const hi = (w, L) => { const r = WORDS[w].rate[L]; return Array.isArray(r) ? r[1] : r; };
 

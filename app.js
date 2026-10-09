@@ -1,4 +1,4 @@
-import { KIND, TYPES, WORDS, buildPlan, fmt, planTotal } from './plan.js';
+import { KIND, TYPES, WORDS, MODULE_TRANSITIONS, moduleOf, buildPlan, fmt, planTotal } from './plan.js';
 import { t, LOCALE, translatePage } from './i18n.js';
 
 // Shown names: plans keep English data; the interface translates words and sessions.
@@ -298,6 +298,7 @@ document.addEventListener('visibilitychange', () => {
 let run = null, raf = 0;
 
 function resetCountdown() {
+  $('row').classList.remove('fusing');
   $('centre').classList.remove('cd');
   const cd = $('countdown');
   cd.classList.remove('leaving');
@@ -321,7 +322,7 @@ function startRun() {
   const segs = plan.map((s) => ({ ...s }));
   const starts = []; let acc = 0;
   segs.forEach((s) => { starts.push(acc); acc += s.dur; });
-  run = { segs, starts, total: acc, elapsed: 0, last: performance.now(), paused: false, phase: 0, idx: -1, txt: {}, cd: false, clockAnim: null, cueSpm: segs[0].spm,
+  run = { segs, starts, total: acc, elapsed: 0, last: performance.now(), paused: false, phase: 0, idx: -1, txt: {}, cd: false, clockAnim: null, cueSpm: segs[0].spm, pre: null, fuse: null,
     rowedBy: segs.map(() => 0), startedAt: new Date().toISOString(), type: state.type, mode: state.mode,
     target: state.mode === 'time' ? `${state.minutes} min` : `${state.meters} m` };
   $('ticks').innerHTML = starts.slice(1).map((t) => `<span style="left:${(t / acc) * 100}%"></span>`).join('');
@@ -352,6 +353,7 @@ function tickRate(to) {
   shownRate = to;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (from === null || from === to || reduce) { el.textContent = to; return; }
+  el.textContent = from;   // start from the previous rate, never from a blank
   const steps = Math.abs(to - from), dir = Math.sign(to - from), each = TICK_MS / steps;
   for (let k = 1; k <= steps; k++) tickTimers.push(setTimeout(() => { el.textContent = from + dir * k; }, k * each));
   tickTimers.push(setTimeout(() => {
@@ -380,29 +382,103 @@ function swapModules(from, to) {
 function enterSeg(i) {
   const first = run.idx < 0;
   run.idx = i;
-  const s = run.segs[i], k = KIND[s.kind];
   if (!first) startClockTick();
+  // A transition that lands on the catch has already shown this interval.
+  if (run.pre === i) { run.pre = null; return; }
+  showSeg(i, { first });
+}
+
+// Everything the rowing screen shows for an interval: colour, names, modules and rate.
+function showSeg(i, how = {}) {
+  const s = run.segs[i], k = KIND[s.kind];
   const row = $('row');
   row.style.setProperty('--bg', k.bg);
   row.style.setProperty('--fg', k.ink);
   document.querySelector('meta[name="theme-color"]').content = k.bg;
   document.documentElement.style.backgroundColor = k.bg;
   $('segName').textContent = wordName(s);
-  // Each word shows its own modules: the rhythm cue and rate, or its drill stages.
-  // A change of module swaps them with the countdown's shrink and grow.
-  const mode = WORDS[s.word]?.detail || 'rate';
+  const mode = moduleOf(s.word);
   if (row.dataset.mode !== mode) {
     const prev = row.dataset.mode;
     row.dataset.mode = mode;
-    if (!first && !matchMedia('(prefers-reduced-motion: reduce)').matches) swapModules(prev, mode);
-    if (mode === 'rate') shownRate = first ? null : shownRate;
+    if (!how.first) moduleTransition(prev, mode, how);
   }
   if (mode === 'stages') {
     run.stage = -1;
-    document.querySelectorAll('#stageBar i').forEach((el) => { el.style.width = '0'; });
+    layoutStages(WORDS[s.word].stages.length);
+    shownRate = s.spm;   // the rate ticks up from the drill's rate when the cue returns
   } else tickRate(s.spm);
   const next = run.segs[i + 1];
   $('nextName').textContent = next ? wordName(next) : t('finish');
+}
+
+// ---------- Module transitions ----------
+// Keyed by module, never by word, so any future word using these modules gets them.
+// Pairs without a designed transition fall back to the plain swap.
+const FUSE_MS = 420;
+const TRANSITIONS = { 'stages>rate': fuseToRhythm };
+MODULE_TRANSITIONS.forEach((key) => { if (!TRANSITIONS[key]) console.warn(`No animation for ${key}`); });
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function moduleTransition(from, to, how) {
+  if (reducedMotion()) return;
+  const fn = TRANSITIONS[`${from}>${to}`];
+  if (fn) fn(how); else swapModules(from, to);
+}
+
+// Stage pills, laid out absolutely so they can slide and fuse.
+function layoutStages(n) {
+  const bar = $('stageBar');
+  if (bar.children.length !== n) bar.innerHTML = '<span><i></i></span>'.repeat(n);
+  const W = bar.clientWidth, g = 8, w = (W - (n - 1) * g) / n;
+  [...bar.children].forEach((sp, k) => {
+    sp.classList.remove('bare');
+    sp.style.left = `${k * (w + g)}px`; sp.style.width = `${w}px`;
+    sp.firstChild.style.width = '0';
+  });
+}
+window.addEventListener('resize', () => {
+  if (run && !run.fuse && $('row').dataset.mode === 'stages') {
+    const widths = [...$('stageBar').children].map((sp) => sp.firstChild.style.width);
+    layoutStages(widths.length);
+    [...$('stageBar').children].forEach((sp, k) => { sp.firstChild.style.width = widths[k]; });
+  }
+});
+
+// Stages to rhythm: the pills fuse into the track while their fill flows into the cursor,
+// which pops in at the fill's end and travels with it. At a natural end it lands on the
+// catch where the next interval starts; on a skip it meets the stroke where it is.
+function fuseToRhythm(how) {
+  const row = $('row'), bar = $('stageBar'), spans = [...bar.children];
+  const W = bar.clientWidth, P = $('puck').offsetWidth;
+  const L0 = spans.map((sp) => parseFloat(sp.style.left) || 0), w = parseFloat(spans[0]?.style.width) || W;
+  let fromX = W - P / 2;
+  if (!how.landing) {
+    fromX = P / 2;
+    spans.forEach((sp, k) => { const f = parseFloat(sp.firstChild.style.width) || 0; if (f > 0) fromX = Math.max(fromX, L0[k] + (f / 100) * w); });
+  }
+  spans.forEach((sp) => sp.classList.add('bare'));
+  row.classList.add('fusing');
+  run.fuse = { t0: performance.now(), fromX, landing: !!how.landing, L0, w, W, P };
+  const name = $('segName'); name.classList.remove('pop'); void name.offsetWidth; name.classList.add('pop');
+  const puck = $('puck'); puck.classList.remove('pop-in'); void puck.offsetWidth; puck.classList.add('pop-in');
+}
+
+// Advance a running fuse; returns the cursor position to draw, or null when done.
+function stepFuse(now, liveX) {
+  const F = run.fuse;
+  if (!F) return null;
+  const k = Math.min(1, (now - F.t0) / FUSE_MS), e = easeOut(k);
+  const under = (xx) => xx * (F.W - F.P) + F.P / 2;
+  const target = F.landing ? under(0) : under(liveX);
+  const X = F.fromX + (target - F.fromX) * e;
+  [...$('stageBar').children].forEach((sp, j) => {
+    const l = F.L0[j] * (1 - e), ww = F.w + (F.W - F.w) * e;
+    sp.style.left = `${l}px`; sp.style.width = `${ww}px`;
+    sp.firstChild.style.width = `${Math.max(0, Math.min(1, (X - l) / ww)) * 100}%`;
+  });
+  if (k >= 1 && run.pre == null) { $('row').classList.remove('fusing'); run.fuse = null; return null; }
+  return Math.max(0, Math.min(1, (X - F.P / 2) / (F.W - F.P)));
 }
 
 // Drive takes about a third of the stroke at low rates, closer to 40% when racing.
@@ -453,6 +529,17 @@ function tick(now) {
   const segEnd = run.starts[i + 1] ?? run.total;
   const rem = segEnd - run.elapsed;
 
+  // A designed module transition that needs a lead starts just before the switch catch,
+  // so it lands exactly as the next interval's first stroke begins.
+  if (!run.fuse && run.pre == null && !run.paused && i < run.segs.length - 1 && !reducedMotion()) {
+    const nxt = run.segs[i + 1];
+    if (TRANSITIONS[`${moduleOf(s.word)}>${moduleOf(nxt.word)}`]) {
+      const toNext = (1 - run.phase) * (60 / run.cueSpm);
+      const isSwitch = segEnd - (run.elapsed + toNext) < (60 / s.spm) / 2;
+      if (isSwitch && toNext * 1000 <= FUSE_MS) { run.pre = i + 1; showSeg(i + 1, { landing: true }); }
+    }
+  }
+
   // Drill stages: the bar fills with time; the stage name changes on a catch.
   if ($('row').dataset.mode === 'stages') {
     const stages = WORDS[s.word].stages;
@@ -474,7 +561,8 @@ function tick(now) {
   const d = driveShare(run.cueSpm), p = run.phase;
   const drive = p < d;
   const x = drive ? easeOut(p / d) : 1 - ease((p - d) / (1 - d));
-  $('row').style.setProperty('--x', x.toFixed(4));
+  const fx = stepFuse(now, x);
+  $('row').style.setProperty('--x', (fx ?? x).toFixed(4));
 
   // Metrics
   let clockShown = Math.ceil(rem);
