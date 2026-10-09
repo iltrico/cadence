@@ -4,7 +4,6 @@
 // length limits and a rate per fitness level.
 // PHRASES combine words by fixed rules: warm-up, main set, cool-down.
 // SENTENCES are the sessions: which phrases, with which words.
-// Each session has its own cover colour, from cool to hot by intensity.
 //
 // Spare time is always used in the same order:
 //   1. stretch the work words within their limits
@@ -57,15 +56,26 @@ const hi = (w, L) => { const r = WORDS[w].rate[L]; return Array.isArray(r) ? r[1
 // warm: 'short' (no Firm strokes), 'standard' (no Firm strokes), 'firm' (ends on Firm strokes), 'easy' (Easy only)
 // xBelow: length in minutes under which the session uses its Express limits.
 export const TYPES = [
-  { id: 'steady',    kind: 'steady', name: 'Steady state',  desc: 'Long, easy aerobic base.',               warm: 'short',    xBelow: 0, cover: { bg: '#2EC4B6', ink: '#04201D' } },
-  { id: 'tempo',     kind: 'steady', name: 'Tempo',         desc: 'Sustained and comfortably hard.',        warm: 'standard', xBelow: 20, cover: { bg: '#FFD23F', ink: '#2A2000' } },
-  { id: 'threshold', kind: 'work',   name: 'Threshold',     desc: 'Long reps just under race effort.',      warm: 'firm',     xBelow: 30, cover: { bg: '#FF7A45', ink: '#2A0F00' } },
-  { id: 'vo2',       kind: 'work',   name: '2k pace',       desc: 'Race-rhythm reps with equal rest.',      warm: 'firm',     xBelow: 30, cover: { bg: '#FF3B5C', ink: '#2A0008' } },
-  { id: 'power',     kind: 'work',   name: 'Power sprints', desc: 'Short bursts with full recovery.',       warm: 'firm',     xBelow: 25, cover: { bg: '#D93A8E', ink: '#22000F' } },
-  { id: 'pyramid',   kind: 'work',   name: 'Pyramid',       desc: 'Pieces build up, then step down.',       warm: 'firm',     xBelow: 25, cover: { bg: '#FF7EB3', ink: '#2A0016' } },
-  { id: 'ladder',    kind: 'steady', name: 'Rate ladder',   desc: 'Same pressure, two strokes up each rung.', warm: 'standard', xBelow: 15, cover: { bg: '#3DD68C', ink: '#04260F' } },
-  { id: 'recovery',  kind: 'cool',   name: 'Recovery',      desc: 'Light paddle to flush the legs.',        warm: 'easy',     xBelow: 0, cover: { bg: '#B9A6FF', ink: '#1B1433' } },
+  { id: 'recovery',  kind: 'cool',   name: 'Recovery',      desc: 'Light paddle to flush the legs.',        warm: 'easy',     xBelow: 0, effort: 1 },
+  { id: 'steady',    kind: 'steady', name: 'Steady state',  desc: 'Long, easy aerobic base.',               warm: 'short',    xBelow: 0, effort: 1 },
+  { id: 'ladder',    kind: 'steady', name: 'Rate ladder',   desc: 'Same pressure, two strokes up each rung.', warm: 'standard', xBelow: 15, effort: 2 },
+  { id: 'tempo',     kind: 'steady', name: 'Tempo',         desc: 'Sustained and comfortably hard.',        warm: 'standard', xBelow: 20, effort: 2 },
+  { id: 'threshold', kind: 'work',   name: 'Threshold',     desc: 'Long reps just under race effort.',      warm: 'firm',     xBelow: 30, effort: 3 },
+  { id: 'pyramid',   kind: 'work',   name: 'Pyramid',       desc: 'Pieces build up, then step down.',       warm: 'firm',     xBelow: 25, effort: 3 },
+  { id: 'power',     kind: 'work',   name: 'Power sprints', desc: 'Short bursts with full recovery.',       warm: 'firm',     xBelow: 25, effort: 4 },
+  { id: 'vo2',       kind: 'work',   name: '2k pace',       desc: 'Race-rhythm reps with equal rest.',      warm: 'firm',     xBelow: 30, effort: 4 },
 ];
+
+// Cover colours show how hard a session is: four effort levels, cool to hot,
+// using the app's original palette.
+// Sessions are listed easiest first, so swiping right means harder.
+export const EFFORT = {
+  1: { bg: '#B9A6FF', ink: '#1B1433' },  // easy: lilac
+  2: { bg: '#2EC4B6', ink: '#04201D' },  // moderate: teal
+  3: { bg: '#FF9F1C', ink: '#231300' },  // hard: orange
+  4: { bg: '#FF3B5C', ink: '#2A0008' },  // very hard: red
+};
+TYPES.forEach((t) => { t.cover = EFFORT[t.effort]; });
 
 // Rate label for a session card at a fitness level.
 export function rateLabel(id, L = 'recreational') {
