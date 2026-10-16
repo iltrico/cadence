@@ -116,7 +116,7 @@ input { user-select: text; -webkit-user-select: text; }
 .face.back {
   transform: rotateY(180deg); background: #FFFFFF; color: var(--ink); padding: 5px;
   display: flex; flex-direction: column;
-  box-shadow: inset 0 0 0 5px var(--cbg), 0 12px 32px rgba(18, 19, 26, 0.16);   /* lifted above the home screen */
+  box-shadow: inset 0 0 0 5px var(--cbg);
 }
 /* The heading sits where the rate sits on the front. */
 .b-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s12); padding: 15px 19px var(--s8); }
@@ -548,6 +548,10 @@ input { user-select: text; -webkit-user-select: text; }
 .start:disabled, .ghost:disabled { opacity: 0.35; }
 .done-actions { display: grid; gap: 0.75rem; }
 
-/* Sheet grip: drag down from the top of Plan and History to close them */
+/* Sheet grip: drag down from the top of History to close it */
 .grip-zone { touch-action: none; cursor: grab; margin: calc(-1 * var(--s12)) 0 0; padding-top: var(--s12); }
-.grip { display: block; width: 40px; height: 5px; border-radius: var(--r-pill); background: var(--line); margin: 0 auto var(--s12); }
+/* The handle is the close control: tap it, drag it down, or use the back gesture. Its hit area
+   is a full 44 px tall while the visible bar stays small. */
+.grip { display: block; width: 72px; height: 44px; margin: calc(-1 * var(--s16)) auto 0; padding: 0; border: 0; background: none; cursor: grab; position: relative; }
+.grip::before { content: ''; position: absolute; left: 16px; right: 16px; top: 50%; height: 5px; margin-top: -2.5px; border-radius: var(--r-pill); background: var(--line); }
+.grip:focus-visible { outline: 3px solid var(--ink); outline-offset: -6px; border-radius: var(--r-pill); }

@@ -471,19 +471,24 @@ function draggable(id) {
   const sh = $(id), card = sh.querySelector('.sheet-card'), grip = card.querySelector('.grip-zone');
   let d = null;
   grip.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('button')) return;
-    d = { y: e.clientY, t: performance.now(), h: card.offsetHeight, dy: 0 };
-    grip.setPointerCapture(e.pointerId);
+    if (e.target.closest('button') && !e.target.closest('.grip')) return;
+    delete card.querySelector('.grip')?.dataset.dragged;   // a new press starts fresh
+    d = { y: e.clientY, t: performance.now(), h: card.offsetHeight, dy: 0, id: e.pointerId, moving: false };
   });
   grip.addEventListener('pointermove', (e) => {
     if (!d) return;
     d.dy = Math.max(0, e.clientY - d.y);
+    // Only a real drag captures the pointer, so a tap on the handle stays a tap.
+    if (!d.moving) { if (d.dy <= 4) return; d.moving = true; grip.setPointerCapture(d.id); }
     card.style.transform = `translateY(${d.dy}px)`;
     sh.style.backgroundColor = scrim(1 - d.dy / d.h);
   });
   const up = () => {
     if (!d) return;
-    const { dy, h, t } = d; d = null;
+    const { dy, h, t, moving } = d; d = null;
+    if (!moving) return;
+    const handle = card.querySelector('.grip');
+    if (handle) handle.dataset.dragged = '1';
     sh.style.backgroundColor = '';
     if (dy > h / 3 || dy / Math.max(1, performance.now() - t) > 0.6) { closeSheet(id, dy); return; }
     card.style.transform = '';
@@ -1030,7 +1035,8 @@ $('histList').addEventListener('click', (e) => {
 const openHistory = () => { renderHistory(); openSheet('histSheet'); };
 $('historyBtn').addEventListener('click', openHistory);
 $('doneHistory').addEventListener('click', openHistory);
-$('histClose').addEventListener('click', () => closeSheet('histSheet'));
+// The handle closes the sheet on a tap; a drag is handled by draggable() and never counts as a tap.
+$('histGrip').addEventListener('click', (e) => { if (e.currentTarget.dataset.dragged) { delete e.currentTarget.dataset.dragged; return; } closeSheet('histSheet'); });
 $('histSheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeSheet('histSheet'); });
 draggable('histSheet');
 
@@ -1117,6 +1123,12 @@ function returnToSetup(fromId) {
 $('again').addEventListener('click', () => returnToSetup('done'));
 
 document.addEventListener('keydown', (e) => {
+  // Escape closes an open sheet, the keyboard's version of the handle and the back gesture.
+  if (e.key === 'Escape') {
+    const open = SHEETS.find((id) => !$(id).hidden && !$(id).dataset.closing);
+    if (open === 'pausedSheet') setPaused(false); else if (open) closeSheet(open);
+    if (open) return;
+  }
   if (!run || e.target.matches('input')) return;
   if (e.code === 'Space') { e.preventDefault(); setPaused(!run.paused); }
   if (e.key === 'ArrowRight') $('skip').click();
