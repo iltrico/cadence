@@ -11,10 +11,10 @@ const MOTION = (() => {
     // Scale
     instant: ms('--dur-instant'), quick: ms('--dur-quick'), base: ms('--dur-base'), emphasis: ms('--dur-emphasis'),
     stagger: ms('--stagger'), rise: ms('--rise'),
-    out: v('--ease-out'), in: v('--ease-in'), settle: v('--ease-settle'), pop: v('--ease-pop'),
+    out: v('--ease-out'), in: v('--ease-in'), settle: v('--ease-settle'), pop: v('--ease-pop'), turn: v('--ease-turn'),
     // Roles
     enter: ms('--t-enter'), exit: ms('--t-exit'), popDur: ms('--t-pop'), sheet: ms('--t-sheet'),
-    counter: ms('--t-counter'), colour: ms('--t-colour'),
+    counter: ms('--t-counter'), colour: ms('--t-colour'), flip: ms('--t-flip'),
   };
 })();
 
@@ -54,10 +54,9 @@ function buildTypes() {
           <span class="t-desc">${t(`desc.${ty.id}`)}</span>
           <div class="shade"></div>
         </div>
-        <div class="face back" aria-hidden="true"><ol class="plan back-list"></ol><div class="shade"></div></div>
       </div>
     </div>`).join('');
-  document.querySelectorAll('.back-list').forEach((list) => list.addEventListener('scroll', () => listEdges(list), { passive: true }));
+
   $('dots').innerHTML = TYPES.map(() => '<span></span>').join('');
 }
 
@@ -93,8 +92,8 @@ function updateCards() {
     c.style.opacity = (1 - 0.55 * d).toFixed(3);
     c.style.setProperty('--shift', `${Math.max(-1, Math.min(1, off)) * 28}px`);
     if (Math.abs(off) < 0.5) pos = j - off;
-    if (c.dataset.id === flippedId && Math.abs(off) > 0.5) setFlip(flippedId, false);
   });
+  if (seated) seated.follow();
   // Plan bar follows the drag: blend between the two cards either side of centre.
   const p = Math.max(0, Math.min(cards.length - 1, pos));
   const a = Math.floor(p), b = Math.min(cards.length - 1, a + 1);
@@ -124,7 +123,7 @@ function pickCentred() {
     const d = Math.abs(b.offsetLeft + b.offsetWidth / 2 - mid);
     if (d < dist) { dist = d; best = b.dataset.id; }
   });
-  if (best && best !== state.type) { unflipAll(true); state.type = best; refresh(); }
+  if (best && best !== state.type) { state.type = best; refresh(); }
 }
 
 function renderLength() {
@@ -209,27 +208,27 @@ function renderPlan(animate = false) {
   const total = planTotal(plan);
   if (animate && before) tweenBar(before, slotPlans[idx]);
   else drawBar(idx, idx, 0);
-  fillBacks();
   $('start').textContent = t('start', { time: fmt(total) });
 }
 
 function refresh() { renderPlan(); renderTypes(); renderLength(); persist(); }
 
-// ---------- Card backs ----------
-// Each card's back lists its intervals for the chosen length, as a plain table.
-function fillBacks() {
-  document.querySelectorAll('.type').forEach((card, j) => {
-    const list = card.querySelector('.back-list');
-    let at = 0;
-    list.replaceChildren(...(allPlans[j] || []).map((sg) => {
-      const li = document.createElement('li');
-      const cell = (cls, text) => Object.assign(document.createElement('span'), { className: cls, textContent: text });
-      const dot = cell('p-dot', ''); dot.style.background = KIND[sg.kind].bg;
-      li.append(cell('p-at', fmt(at)), dot, cell('p-name', wordName(sg)), cell('p-spm', `${sg.spm} ${t('spm')}`), cell('p-dur', fmt(sg.dur)));
-      at += sg.dur;
-      return li;
-    }));
-    listEdges(list);
+// ---------- Card flip ----------
+// Turning a card over lifts it into an overlay above the home screen. It flips with depth
+// and grows down over the length selector, so the plan reads at full height without moving
+// anything underneath. The back is a heading where the front's rate sits, then the intervals.
+let flippedId = null, flipStage = null, seated = null;
+const cardEl = (id) => document.querySelector(`.type[data-id="${id}"]`);
+
+function intervalRows(segs) {
+  let at = 0;
+  return segs.map((sg) => {
+    const li = document.createElement('li');
+    const cell = (cls, text) => Object.assign(document.createElement('span'), { className: cls, textContent: text });
+    const dot = cell('p-dot', ''); dot.style.background = KIND[sg.kind].bg;
+    li.append(cell('p-at', fmt(at)), dot, cell('p-name', wordName(sg)), cell('p-spm', `${sg.spm} ${t('spm')}`), cell('p-dur', fmt(sg.dur)));
+    at += sg.dur;
+    return li;
   });
 }
 // Fade an edge of the list only when there is more content beyond it.
@@ -239,30 +238,117 @@ function listEdges(list) {
   list.style.setProperty('--bottom', more - list.scrollTop > 2 ? '40px' : '0px');
 }
 
-// ---------- Card flip ----------
-let flippedId = null;
-const cardEl = (id) => document.querySelector(`.type[data-id="${id}"]`);
-function setFlip(id, on, animate = true) {
-  const card = cardEl(id);
-  if (!card || card.classList.contains('flipped') === on) return;
-  const inner = card.querySelector('.card-flip');
-  const [front, back] = card.querySelectorAll('.face');
-  card.querySelectorAll('.card-flip, .shade').forEach((el) => el.getAnimations().forEach((a) => a.cancel()));
-  card.classList.toggle('flipped', on);
-  flippedId = on ? id : null;
-  front.setAttribute('aria-hidden', on); back.setAttribute('aria-hidden', !on);
-  if (on) listEdges(back.querySelector('.back-list'));
-  if (!animate) return;
-  if (reduceMotion()) { inner.animate([{ opacity: 0 }, { opacity: 1 }], { duration: MOTION.exit }); return; }
-  const from = on ? 0 : 180, to = on ? 180 : 0, over = on ? 6 : -6;
-  const opt = { duration: MOTION.enter, easing: MOTION.settle };
-  inner.animate([{ transform: `rotateY(${from}deg)` }, { transform: `rotateY(${to + over}deg)`, offset: 0.75 }, { transform: `rotateY(${to}deg)` }], opt);
-  const [leaving, arriving] = on ? [front, back] : [back, front];
-  leaving.querySelector('.shade').animate([{ opacity: 0 }, { opacity: 0.5, offset: 0.45 }, { opacity: 0.5 }], opt);
-  arriving.querySelector('.shade').animate([{ opacity: 0.5 }, { opacity: 0.5, offset: 0.45 }, { opacity: 0 }], opt);
+function flipKeyframes(on) {
+  const from = on ? 0 : 180, to = on ? 180 : 0, over = on ? 6 : -6, mid = (from + to) / 2;
+  // The card swings back in depth as it turns, as if pivoting behind itself, then comes forward.
+  return [
+    { transform: `translateZ(0) rotateY(${from}deg)` },
+    { transform: `translateZ(-90px) rotateY(${mid}deg)`, offset: 0.4 },
+    { transform: `translateZ(0) rotateY(${to + over}deg)`, offset: 0.78 },
+    { transform: `translateZ(0) rotateY(${to}deg)` },
+  ];
 }
-const toggleFlip = () => setFlip(state.type, flippedId !== state.type);
-const unflipAll = (animate = false) => { if (flippedId) setFlip(flippedId, false, animate); };
+
+function openFlip() {
+  const id = state.type, card = cardEl(id), setup = $('setup');
+  if (!card || flipStage) return;
+  const ty = TYPES.find((x) => x.id === id), segs = plan;
+  const host = setup.getBoundingClientRect(), r = card.getBoundingClientRect();
+  const bottom = $('planBtn').getBoundingClientRect().top - 16;
+  const stage = document.createElement('div');
+  stage.className = 'flip-stage';
+  stage.style.cssText = `left:${r.left - host.left}px;top:${r.top - host.top}px;width:${r.width}px;height:${r.height}px;--cbg:${ty.cover.bg};--cfg:${ty.cover.ink}`;
+  const front = card.querySelector('.face.front').cloneNode(true);
+  front.setAttribute('aria-hidden', 'true');
+  const back = document.createElement('div');
+  back.className = 'face back';
+  const head = document.createElement('div');
+  head.className = 'b-head';
+  head.append(Object.assign(document.createElement('span'), { className: 'b-name', textContent: typeName(id) }),
+    Object.assign(document.createElement('span'), { className: 'b-total', textContent: fmt(planTotal(segs)) }));
+  const list = Object.assign(document.createElement('ol'), { className: 'plan back-list' });
+  list.append(...intervalRows(segs));
+  list.addEventListener('scroll', () => listEdges(list), { passive: true });
+  back.append(head, list, Object.assign(document.createElement('div'), { className: 'shade' }));
+  const inner = Object.assign(document.createElement('div'), { className: 'card-flip' });
+  inner.append(front, back);
+  stage.append(inner);
+  stage.setAttribute('role', 'button');
+  stage.setAttribute('tabindex', '0');
+  stage.setAttribute('aria-label', `${typeName(id)}, ${t('close')}`);
+  // A tap anywhere closes the card; a drag that scrolls the list doesn't.
+  let press = null;
+  stage.addEventListener('pointerdown', (e) => { press = { x: e.clientX, y: e.clientY, top: list.scrollTop }; });
+  stage.addEventListener('click', (e) => {
+    const moved = press && (Math.hypot(e.clientX - press.x, e.clientY - press.y) > 8 || Math.abs(list.scrollTop - press.top) > 2);
+    press = null;
+    if (!moved) closeFlip();
+  });
+  stage.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { e.preventDefault(); closeFlip(); }
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); const dir = e.key === 'ArrowRight' ? 1 : -1; closeFlip(true, () => moveBy(dir)); }
+  });
+  setup.append(stage);
+  card.style.visibility = 'hidden';
+  $('types').classList.add('locked');   // you can't spin the row while holding one of its cards
+  flipStage = { el: stage, card, inner, front, back, list, h0: r.height };
+  flippedId = id;
+  inner.style.transform = 'rotateY(180deg)';
+  const h1 = Math.max(r.height, bottom - r.top);
+  if (reduceMotion()) {
+    stage.style.height = `${h1}px`;
+    stage.animate([{ opacity: 0 }, { opacity: 1 }], { duration: MOTION.exit });
+  } else {
+    const opt = { duration: MOTION.flip, easing: MOTION.turn };
+    inner.animate(flipKeyframes(true), opt);
+    stage.animate([{ height: `${r.height}px` }, { height: `${h1}px` }], { duration: MOTION.flip, easing: MOTION.out, fill: 'forwards' })
+      .onfinish = (e) => { stage.style.height = `${h1}px`; e.target.cancel(); listEdges(list); };
+    front.querySelector('.shade').animate([{ opacity: 0 }, { opacity: 0.5, offset: 0.45 }, { opacity: 0.5 }], opt);
+    back.querySelector('.shade').animate([{ opacity: 0.5 }, { opacity: 0.5, offset: 0.45 }, { opacity: 0 }], opt);
+  }
+  listEdges(list);
+  stage.focus({ preventScroll: true });
+  syncGuard();
+}
+
+// Closing puts the card back first: it turns over and shrinks to its slot in place, and is
+// fully lit and at slot size by SEAT_AT. Only then can the row carry it, so a move to another
+// card (then) starts at SLIDE_AT, overlapping the end of the turn, and from that point the
+// card follows its slot and fades with the carousel like any other card.
+const SEAT_AT = 0.62, SLIDE_AT = 0.65;
+function closeFlip(animate = true, then = null) {
+  const f = flipStage;
+  if (!f) { then?.(); return; }
+  flipStage = null; flippedId = null;
+  $('types').classList.remove('locked');
+  const done = () => { f.el.remove(); f.card.style.visibility = ''; syncGuard(); };
+  if (!animate || reduceMotion()) { done(); then?.(); return; }
+  f.el.getAnimations({ subtree: true }).forEach((a) => a.cancel());
+  const D = MOTION.flip, opt = { duration: D, easing: MOTION.turn };
+  f.inner.style.transform = 'rotateY(0deg)';
+  f.inner.animate(flipKeyframes(false), opt);
+  f.back.querySelector('.shade').animate([{ opacity: 0 }, { opacity: 0.5, offset: 0.45 }, { opacity: 0.5 }], opt);
+  f.front.querySelector('.shade').animate([{ opacity: 0.5 }, { opacity: 0.5, offset: 0.45 }, { opacity: 0, offset: SEAT_AT }, { opacity: 0 }], opt);
+  const h1 = f.el.offsetHeight, t0 = performance.now(), host = () => $('setup').getBoundingClientRect();
+  const slot = f.card.getBoundingClientRect();
+  let sliding = false;
+  // Once seated, the card is drawn by the carousel's own frame, in step with the row.
+  const follow = () => {
+    const r = f.card.getBoundingClientRect(), h = host();
+    Object.assign(f.el.style, { left: `${r.left - h.left}px`, top: `${r.top - h.top}px`, width: `${r.width}px`, height: `${r.height}px`,
+      opacity: f.card.style.opacity || '1' });
+  };
+  if (then) setTimeout(() => { sliding = true; seated = { follow }; follow(); then(); }, D * SLIDE_AT);
+  const step = (now) => {
+    if (!f.el.isConnected) return;
+    const k = Math.min(1, (now - t0) / D), seat = Math.min(1, k / SEAT_AT), e = 1 - Math.pow(1 - seat, 3);
+    if (!sliding) f.el.style.height = `${h1 + (slot.height - h1) * e}px`;
+    if (k < 1) requestAnimationFrame(step); else { if (seated?.follow === follow) seated = null; done(); }
+  };
+  requestAnimationFrame(step);
+}
+const toggleFlip = () => (flipStage ? closeFlip() : openFlip());
+const unflipAll = (animate = false) => closeFlip(animate);
 
 function setValue(v) {
   state.minutes = Math.min(LENGTH.max, Math.max(LENGTH.min, Math.round(v / LENGTH.step) * LENGTH.step));
@@ -271,12 +357,9 @@ function setValue(v) {
 
 $('types').addEventListener('click', (e) => {
   const b = e.target.closest('.type'); if (!b) return;
-  if (b.dataset.id === state.type) {
-    if (flippedId === state.type && e.target.closest('.back-list') && b.querySelector('.back-list').scrollHeight > b.querySelector('.back-list').clientHeight) return;
-    toggleFlip(); return;
-  }
-  unflipAll(true);
-  state.type = b.dataset.id; refresh(); centreCard(state.type);
+  if (b.dataset.id === state.type) { openFlip(); return; }
+  const go = () => { state.type = b.dataset.id; refresh(); centreCard(state.type); };
+  if (flipStage) closeFlip(true, go); else go();
 });
 let scrollTimer = 0;
 $('types').addEventListener('scroll', () => {
@@ -288,11 +371,15 @@ $('types').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFlip(); return; }
   if (!['ArrowRight', 'ArrowLeft'].includes(e.key)) return;
   e.preventDefault();
-  const i = TYPES.findIndex((t) => t.id === state.type);
-  const n = Math.min(TYPES.length - 1, Math.max(0, i + (e.key === 'ArrowRight' ? 1 : -1)));
-  state.type = TYPES[n].id; refresh(); centreCard(state.type);
-  document.querySelector(`.type[data-id="${state.type}"]`).focus({ preventScroll: true });
+  moveBy(e.key === 'ArrowRight' ? 1 : -1);
 });
+function moveBy(dir) {
+  const i = TYPES.findIndex((t) => t.id === state.type);
+  const n = Math.min(TYPES.length - 1, Math.max(0, i + dir));
+  if (n === i) return;
+  state.type = TYPES[n].id; refresh(); centreCard(state.type);
+  cardEl(state.type).focus({ preventScroll: true });
+}
 $('minus').addEventListener('click', () => setValue(state.minutes - LENGTH.step));
 $('plus').addEventListener('click', () => setValue(state.minutes + LENGTH.step));
 $('planBtn').addEventListener('click', toggleFlip);
@@ -316,11 +403,12 @@ const EASE_OUT = MOTION.out;
 const ZOOM_MS = MOTION.enter;
 function zoomIntoRow(firstBg) {
   const row = $('row'), setup = $('setup');
-  const card = document.querySelector(`.type[data-id="${state.type}"]`);
+  const card = flipStage ? flipStage.el : document.querySelector(`.type[data-id="${state.type}"]`);
+  const fromBack = !!flipStage;
   row.hidden = false;
   if (reduceMotion() || !card) { setup.hidden = true; return; }
   const r = card.getBoundingClientRect(), W = innerWidth, H = innerHeight;
-  const cover = flippedId === state.type ? '#FFFFFF' : TYPES.find((ty) => ty.id === state.type).cover.bg;
+  const cover = fromBack ? '#FFFFFF' : TYPES.find((ty) => ty.id === state.type).cover.bg;
   row.style.transformOrigin = '0 0';
   const zoom = row.animate([
     { transform: `translate(${r.left}px, ${r.top}px) scale(${r.width / W}, ${r.height / H})`, backgroundColor: cover, borderRadius: '48px' },
@@ -334,6 +422,7 @@ function zoomIntoRow(firstBg) {
     if (el.id !== 'types') el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ZOOM_MS * 0.5, fill: 'forwards' });
   });
   zoom.onfinish = () => {
+    closeFlip(false);
     setup.hidden = true;
     setup.getAnimations({ subtree: true }).forEach((a) => a.cancel());
     row.style.transformOrigin = '';
@@ -407,7 +496,7 @@ function draggable(id) {
 // and returns from the recap to setup. It never leaves the app mid-session.
 let guard = false, ignorePop = false;
 function syncGuard() {
-  const root = $('row').hidden && $('done').hidden && SHEETS.every((id) => $(id).hidden);
+  const root = $('row').hidden && $('done').hidden && SHEETS.every((id) => $(id).hidden) && !flipStage;
   if (!root && !guard) { history.pushState({ cadence: 1 }, ''); guard = true; }
   else if (root && guard) { guard = false; ignorePop = true; history.back(); }
 }
@@ -415,7 +504,8 @@ window.addEventListener('popstate', () => {
   if (ignorePop) { ignorePop = false; return; }
   guard = false;
   const open = SHEETS.find((id) => !$(id).hidden && !$(id).dataset.closing);
-  if (open === 'pausedSheet') setPaused(false);
+  if (!open && flipStage) closeFlip();
+  else if (open === 'pausedSheet') setPaused(false);
   else if (open) closeSheet(open);
   else if (!$('row').hidden) requestEnd();
   else if (!$('done').hidden) $('again').click();

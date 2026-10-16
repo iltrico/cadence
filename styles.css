@@ -17,12 +17,14 @@
   --dur-quick: 220ms;
   --dur-base: 340ms;
   --dur-emphasis: 420ms;
+  --dur-slow: 560ms;      /* deliberate, physical moves: the card flip */
   --stagger: 70ms;        /* gap between items in a cascade */
   --rise: 12px;           /* distance things travel as they enter or leave */
   --ease-out: cubic-bezier(.2,.8,.2,1);     /* entering, moving into place */
   --ease-in: cubic-bezier(.5,0,.75,0);      /* leaving; also content fading in with a move */
   --ease-settle: cubic-bezier(.25,1,.5,1);  /* arriving with a light overshoot */
   --ease-pop: cubic-bezier(.2,.9,.3,1.4);   /* the pop */
+  --ease-turn: cubic-bezier(.6,0,.25,1);    /* a turn that gathers speed, then settles: the card flip */
   /* Motion roles: what a moment is for. Each points at the scale and adds no value of its own. */
   --t-enter: var(--dur-base);       /* screens and panels arriving */
   --t-exit: var(--dur-quick);       /* anything leaving */
@@ -30,6 +32,7 @@
   --t-sheet: var(--dur-emphasis);   /* a sheet rising */
   --t-counter: var(--dur-emphasis); /* numbers ticking to a new value */
   --t-colour: var(--dur-base);      /* background colour changes, in step with the switch */
+  --t-flip: var(--dur-slow);        /* turning a card over */
 
   box-sizing: border-box;
 }
@@ -79,6 +82,8 @@ input { user-select: text; -webkit-user-select: text; }
   --card: min(78%, 22rem);
 }
 .types::-webkit-scrollbar { display: none; }
+/* While a card is open, the row can't be swiped. */
+.types.locked { overflow-x: hidden; touch-action: none; }
 /* Spacers sized so the first and last cards can scroll to the exact centre */
 .types::before, .types::after { content: ''; flex: 0 0 calc(50% - var(--card) / 2 - 0.75rem); }
 .type {
@@ -95,7 +100,8 @@ input { user-select: text; -webkit-user-select: text; }
 .type:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
 /* Two-sided card: the front is the session, the back its intervals. */
 .card-flip { position: absolute; inset: 0; transform-style: preserve-3d; }
-.type.flipped .card-flip { transform: rotateY(180deg); }
+.flip-stage { position: absolute; z-index: 4; perspective: 1100px; cursor: pointer; border-radius: var(--r-card); }
+.flip-stage:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
 .face {
   position: absolute; inset: 0; box-sizing: border-box; overflow: hidden;
   border-radius: var(--r-card);
@@ -107,12 +113,20 @@ input { user-select: text; -webkit-user-select: text; }
   background: var(--cbg); color: var(--cfg); text-align: left;
 }
 .face.front > span { transform: translateX(var(--shift)); }
-.face.back { transform: rotateY(180deg); background: #FFFFFF; color: var(--ink); padding: 5px; box-shadow: inset 0 0 0 5px var(--cbg); }
+.face.back {
+  transform: rotateY(180deg); background: #FFFFFF; color: var(--ink); padding: 5px;
+  display: flex; flex-direction: column;
+  box-shadow: inset 0 0 0 5px var(--cbg), 0 12px 32px rgba(18, 19, 26, 0.16);   /* lifted above the home screen */
+}
+/* The heading sits where the rate sits on the front. */
+.b-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s12); padding: 15px 19px var(--s8); }
+.b-name { font-size: 1.5rem; font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; }   /* title/m */
+.b-total { font-size: 1rem; font-weight: 700; color: var(--muted); }                           /* ui/m */
 /* Each face darkens as it turns away, as if lit from the front. */
 .face .shade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; border-radius: inherit; }
 /* The interval list scrolls without a scrollbar; an edge fades only when there is more beyond it. */
 .plan.back-list {
-  height: 100%; box-sizing: border-box; overflow-y: auto; padding: var(--s8) var(--s12);
+  flex: 1; min-height: 0; box-sizing: border-box; overflow-y: auto; padding: var(--s8) var(--s12);
   scrollbar-width: none; overscroll-behavior: contain;
   --top: 0px; --bottom: 0px;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--top), #000 calc(100% - var(--bottom)), transparent 100%);
@@ -125,8 +139,8 @@ input { user-select: text; -webkit-user-select: text; }
 .plan.back-list .p-name, .plan.back-list .p-dur { font-size: 0.9375rem; }
 .plan.back-list .p-name { overflow-wrap: normal; hyphens: manual; -webkit-hyphens: manual; }
 .plan.back-list .p-dur { min-width: 2.6rem; }
-.type .t-top { display: flex; justify-content: space-between; align-items: center; gap: var(--s8); margin-bottom: auto; }
-.type .t-badge {
+.front .t-top { display: flex; justify-content: space-between; align-items: center; gap: var(--s8); margin-bottom: auto; }
+.front .t-badge {
   font-size: 0.875rem; font-weight: 600; line-height: 1;
   padding: 6px 10px; border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--cfg) 14%, transparent);
@@ -134,13 +148,13 @@ input { user-select: text; -webkit-user-select: text; }
   opacity: 0; transform: scale(0.9);
   transition: opacity var(--dur-quick) var(--ease-out), transform var(--dur-quick) var(--ease-pop);
 }
-.type .t-badge.on { opacity: 1; transform: none; }
-.type .t-name {
+.front .t-badge.on { opacity: 1; transform: none; }
+.front .t-name {
   font-size: clamp(2.25rem, 11vw, 3rem);
   font-weight: 800;
   letter-spacing: -0.02em; line-height: 0.95;
 }
-.type .t-desc { font-size: 1rem; line-height: 1.35; opacity: 0.85; }
+.front .t-desc { font-size: 1rem; line-height: 1.35; opacity: 0.85; }
 
 .dots { display: flex; justify-content: center; gap: 0.4rem; margin-top: -0.25rem; }
 .dots span { width: 0.45rem; height: 0.45rem; border-radius: 999px; background: var(--line); }
@@ -371,7 +385,7 @@ input { user-select: text; -webkit-user-select: text; }
 .rate span {                                           /* display/m */
   font-size: 4rem; font-weight: 800; line-height: 0.9; letter-spacing: -0.02em;
 }
-.seg-name, .type .t-name {                             /* title/xl */
+.seg-name, .front .t-name {                             /* title/xl */
   font-size: min(3rem, 12.3vw); font-weight: 800; line-height: 0.95; letter-spacing: -0.02em;
 }
 .sheet-title, .cd-name, .done-stats dd {               /* title/l */
@@ -386,13 +400,13 @@ input { user-select: text; -webkit-user-select: text; }
 .start, .ghost, .cd-rate, .amount small {              /* ui/l */
   font-size: 1.125rem; font-weight: 700; line-height: 1.2; letter-spacing: 0;
 }
-.pill, .toggle button, .ctl, .type .t-rate, .rate small, .cd-unit, .h-name, .plan .p-name, .plan .p-dur {   /* ui/m */
+.pill, .toggle button, .ctl, .front .t-rate, .rate small, .cd-unit, .h-name, .plan .p-name, .plan .p-dur {   /* ui/m */
   font-size: 1rem; font-weight: 700; line-height: 1.2;
 }
 .round, .x, .h-del {                                   /* ui/icon */
   font-size: 1.5rem; font-weight: 700; line-height: 1;
 }
-.type .t-desc { font-size: 1rem; font-weight: 400; line-height: 1.35; }    /* body/m */
+.front .t-desc { font-size: 1rem; font-weight: 400; line-height: 1.35; }    /* body/m */
 .h-sub { font-size: 0.875rem; font-weight: 400; line-height: 1.35; }       /* body/s */
 .plan-meta, .stats dt, .cd-label, .hist-meta, .done-stats dt,
 .plan .p-at, .plan .p-spm, .split label {             /* label */
@@ -400,7 +414,7 @@ input { user-select: text; -webkit-user-select: text; }
 }
 
 /* Spacing and radius */
-.type .face.front { padding: var(--s20) var(--s24) var(--s24); gap: var(--s4); }
+.face.front { padding: var(--s20) var(--s24) var(--s24); gap: var(--s4); }
 .countdown { border-radius: var(--r-card); padding: var(--s24) var(--s24) var(--s32); }
 .sheet-card { border-radius: var(--r-card); padding: var(--s24); gap: var(--s12); }
 .pill { padding: var(--s8) var(--s16); }
@@ -484,7 +498,7 @@ input { user-select: text; -webkit-user-select: text; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .row, .puck, .ticks span, .type .t-badge, .detail > * { transition: none; }
+  .row, .puck, .ticks span, .front .t-badge, .detail > * { transition: none; }
   .stage-name.pop { animation: none; }
   .types { scroll-behavior: auto; }
   .cd-num.pop, .rate span.pop, .seg-left.pop, .stage-name.pop, .mod-in, .mod-out, .seg-name.pop, .puck.pop-in { animation: none; }
@@ -505,7 +519,7 @@ input { user-select: text; -webkit-user-select: text; }
   .length { grid-column: 2; grid-row: 2; align-self: center; }
   .plan-btn { grid-column: 2; grid-row: 3; }
   .start { grid-column: 2; grid-row: 4; padding: 0.8rem; }
-  .type .t-name { font-size: 2rem; }
+  .front .t-name { font-size: 2rem; }
 }
 
 /* Installed on iOS, fixed screens can stop above the home bar, so size them to the
