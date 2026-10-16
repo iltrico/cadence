@@ -1,4 +1,4 @@
-import { KIND, TYPES, WORDS, MODULE_TRANSITIONS, moduleOf, buildPlan, fmt, planTotal } from './plan.js';
+import { KIND, TYPES, WORDS, LENGTH, MODULE_TRANSITIONS, moduleOf, buildPlan, fmt, planTotal } from './plan.js';
 import { t, LOCALE, translatePage } from './i18n.js';
 import { loadSettings, saveSettings, loadHistory as readHistory, addSession, removeSession } from './storage.js';
 
@@ -28,8 +28,7 @@ const rateText = (r) => r.replace('spm', t('spm'));
 const $ = (id) => document.getElementById(id);
 const COUNTDOWN_STROKES = 4;
 
-// Session length, in minutes.
-const LENGTH = { min: 10, max: 120, step: 5 };
+// Session length, in minutes, comes from the planner (LENGTH): 15 to 60 for every session.
 
 // ---------- State ----------
 const state = loadSettings(localStorage);
@@ -49,7 +48,7 @@ function buildTypes() {
       style="--cbg:${ty.cover.bg};--cfg:${ty.cover.ink}">
       <div class="card-flip">
         <div class="face front">
-          <span class="t-top"><span class="t-rate">${rateText(ty.rate)}</span><span class="t-badge" aria-hidden="true">${t('bestFrom', { n: ty.xBelow })}</span></span>
+          <span class="t-top"><span class="t-rate">${rateText(ty.rate)}</span><span class="t-badge" aria-hidden="true">${t('bestUpTo', { n: ty.bestUpTo })}</span></span>
           <span class="t-name">${typeName(ty.id)}</span>
           <span class="t-desc">${t(`desc.${ty.id}`)}</span>
           <div class="shade"></div>
@@ -65,9 +64,9 @@ function renderTypes() {
   document.querySelectorAll('.type').forEach((b, j) => {
     b.setAttribute('aria-checked', j === i);
     b.tabIndex = j === i ? 0 : -1;
-    // Below its full format, a session says from which length it works best.
-    const x = !!(allPlans[j] && allPlans[j].express);
-    const hint = t('bestFrom', { n: TYPES[j].xBelow });
+    // Past its best length, a session keeps scaling but says it works best shorter.
+    const x = !!(allPlans[j] && allPlans[j].beyond);
+    const hint = t('bestUpTo', { n: TYPES[j].bestUpTo });
     // The badge always holds its place, so the row never shifts; it only fades in and out.
     b.querySelector('.t-badge').classList.toggle('on', x);
     b.setAttribute('aria-label', `${typeName(TYPES[j].id)}${x ? `, ${hint.toLowerCase()}` : ''}`);

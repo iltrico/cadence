@@ -3,14 +3,14 @@
 // how the planner builds a plan, so a planner change that breaks a rule fails loudly.
 // Used by test.mjs during development; the app itself doesn't need it.
 
-import { WORDS, TYPES, LEVELS, MODULE_TRANSITIONS, moduleOf } from './plan.js';
+import { WORDS, TYPES, LEVELS, MODULE_TRANSITIONS, moduleOf, coachStep } from './plan.js';
 
 const M = 60;
 const range = (w, L) => { const r = WORDS[w].rate?.[L]; return Array.isArray(r) ? [Math.min(...r), Math.max(...r)] : [r, r]; };
 
 // Words that make up each session's main set.
 const MAIN = {
-  steady: ['steady'], tempo: ['tempo'], threshold: ['threshold', 'recover'], vo2: ['race', 'recover'],
+  steady: ['steady'], tempo: ['tempo', 'recover'], threshold: ['threshold', 'recover'], vo2: ['race', 'recover'],
   power: ['sprint', 'recover'], pyramid: ['race', 'threshold', 'recover'], ladder: ['rung', 'recover'], recovery: ['easy'],
 };
 const WARM_WORDS = ['pick', 'easy', 'build', 'firm', 'steady'];
@@ -104,8 +104,57 @@ export function validatePlan(plan, id, T, L = 'recreational') {
     if (a !== b && !MODULE_TRANSITIONS.includes(`${a}>${b}`)) fail(`no designed transition from ${a} to ${b}`, i);
   }
 
-  // 11. Express flag matches the length.
-  if (!!plan.express !== (T < type.xBelow * M)) fail('Express flag does not match the length');
+  // 12. Coach numbers: every piece and rest is a round length (whole minutes from 5 minutes,
+  //     half minutes below, tens of seconds under a minute). Easy and the cool-down absorb leftovers.
+  plan.forEach((s, i) => {
+    if (s.word === 'cool' || s.word === 'easy') return;
+    if (s.dur % coachStep(s.dur)) fail(`${s.dur}s is not a coach number`, i);
+  });
+
+  // 13. Rests follow their piece: the word's value, or its set break after every set.
+  if (['tempo', 'threshold', 'vo2', 'power'].includes(id)) {
+    main.forEach((s, k) => {
+      const prev = main[k - 1];
+      if (s.word !== 'recover' || !prev) return;
+      const W = WORDS[prev.word];
+      const setBreak = W.set && prev.rep % W.set === 0;
+      if (setBreak) {
+        if (s.dur < W.setRecover[0] || s.dur > W.setRecover[1]) fail(`set break ${s.dur}s outside ${W.setRecover[0]}-${W.setRecover[1]}s`, firstMain + k);
+        return;
+      }
+      const want = W.recover(prev.dur);
+      if (s.dur !== want) fail(`rest ${s.dur}s, expected ${want}s after ${prev.dur}s ${prev.word}`, firstMain + k);
+    });
+  }
+
+  // 14. Pyramid: one effort (one word, one rate) and one fixed rest throughout.
+  if (id === 'pyramid') {
+    const efforts = main.filter((s) => s.word !== 'recover'), rests = main.filter((s) => s.word === 'recover');
+    if (new Set(efforts.map((s) => `${s.word}@${s.spm}`)).size !== 1) fail('pyramid mixes efforts');
+    if (new Set(rests.map((s) => s.dur)).size > 1) fail('pyramid rests vary');
+    if (rests.length && rests[0].dur !== Math.max(60, Math.floor(efforts[0].dur / 60) * 60)) fail('pyramid rest is not one step');
+  }
+
+  // 16. Rests between ladder climbs stay within their range.
+  if (id === 'ladder') main.filter((s) => s.word === 'recover').forEach((s) => {
+    const [a, b] = WORDS.rung.climbRest;
+    if (s.dur < a || s.dur > b) fail(`rest between climbs ${s.dur}s outside ${a}-${b}s`);
+  });
+
+  // 15. Ladder: within a climb, the rate rises and each rung is shorter than the last (or all equal when short).
+  if (id === 'ladder') {
+    const climbs = [[]];
+    main.forEach((s) => { if (s.word === 'recover') climbs.push([]); else climbs[climbs.length - 1].push(s); });
+    climbs.forEach((c) => {
+      for (let k = 1; k < c.length; k++) {
+        if (c[k].spm <= c[k - 1].spm) fail('ladder rate does not rise');
+        if (c[k].dur > c[k - 1].dur) fail('ladder rung longer than the one before');
+      }
+    });
+  }
+
+  // 11. The "Best up to" flag matches the length.
+  if (!!plan.beyond !== (T > type.bestUpTo * M)) fail('"Best up to" flag does not match the length');
 
   return errors;
 }

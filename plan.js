@@ -1,15 +1,19 @@
 // Cadence planner, built on a small grammar.
 //
-// WORDS are the only intervals a plan can contain. Each has one purpose, a pressure,
-// length limits and a rate per fitness level.
-// PHRASES combine words by fixed rules: warm-up, main set, cool-down.
-// SENTENCES are the sessions: which phrases, with which words.
-//
-// Spare time is always used in the same order:
-//   1. stretch the work words within their limits
-//   2. add repeats, up to the work word's cap
-//   3. a Steady block of 5 minutes or more, placed before the warm-up's builds
-//   4. lengthen Easy, Build and the cool-down within their limits
+// 1. WORDS are the only intervals a plan can contain, each with a rate and length limits.
+// 2. SHAPES: each session's main set has one shape it keeps at every length: one block,
+//    equal pieces, a pyramid (1:2:3:4:3:2:1) or a ladder (climbs of 5:4:3:2:1 rungs).
+// 3. GROWTH: a session starts from its 15-minute form and grows in two ways only:
+//    lengthen the piece furthest below its share of the shape, by one coach step, or add a
+//    piece at its share. It lengthens until pieces reach the session's preferred length,
+//    then adds one. Growth is one sequence per session; every length is a step further on.
+// 4. RESTS follow their piece, by a fixed value per word. Rests between blocks (between
+//    ladder climbs, between sets of sprints) have a range, and stretch to absorb leftover time.
+// 5. COACH NUMBERS: whole minutes from 5 minutes, half minutes below, tens of seconds under 1.
+// 6. FRAME: every session runs 15 to 60 minutes. Warm-ups take 3 to 8 minutes and
+//    cool-downs 2 to 5, by session style. Leftover time goes, in order, to the rests between
+//    blocks (up to their range), to the warm-up's steps (as long as no stretch of easy rowing
+//    in it passes 4 minutes), then to the cool-down.
 
 export const KIND = {
   warm:   { bg: '#FF9F1C', ink: '#231300' },
@@ -30,22 +34,23 @@ const M = 60;
 export const WORDS = {
   pick:      { name: 'Pick drill',   kind: 'drill',   pressure: 'light',    len: [2 * M, 3 * M], detail: 'stages', countdown: false,
                stages: ['armsOnly', 'armsBody', 'halfSlide', 'fullSlide'],   rate: { recreational: 18, club: 18, competitive: 18 } },
-  easy:      { name: 'Easy',         kind: 'warm',   pressure: 'light',    len: [M, 20 * M],      rate: { recreational: [18, 16], club: [18, 16], competitive: [18, 16] } },
+  easy:      { name: 'Easy',         kind: 'warm',   pressure: 'light',    len: [M, 60 * M],      rate: { recreational: [18, 16], club: [18, 16], competitive: [18, 16] } },
   build:     { name: 'Build',        kind: 'warm',   pressure: 'light to moderate', len: [M, 3 * M], from: 20, step: 2 },
   firm:      { name: 'Firm strokes', kind: 'warm',   pressure: 'firm',     len: [M, 2 * M],       rate: { recreational: 24, club: 26, competitive: 28 } },
-  steady:    { name: 'Steady',       kind: 'steady', pressure: 'light to moderate', len: [5 * M, 20 * M], rate: { recreational: [18, 20], club: [18, 20], competitive: [18, 22] } },
-  tempo:     { name: 'Tempo',        kind: 'steady', pressure: 'moderate to hard', len: [4 * M, 10 * M], reps: [6 * M, 10 * M], express: [4 * M, 5 * M],
-               rate: { recreational: [22, 24], club: [22, 24], competitive: [24, 26] }, cap: 40 * M },
-  threshold: { name: 'Threshold',    kind: 'work',   pressure: 'hard',     len: [3 * M, 10 * M], reps: [6 * M, 10 * M], express: [3 * M, 5 * M],
-               rate: { recreational: [24, 26], club: [26, 28], competitive: [28, 30] }, cap: 36 * M, max: 5,
-               recover: (r, x) => (x ? 90 : r > 8 * M ? 3 * M : 2 * M) },
-  race:      { name: 'Race pace',    kind: 'work',   pressure: 'very hard', len: [45, 5 * M], reps: [3 * M, 5 * M], express: [M, 90],
-               rate: { recreational: [28, 28], club: [30, 32], competitive: [32, 34] }, cap: 20 * M, max: 6,
-               recover: (r) => r },
-  sprint:    { name: 'Sprint',       kind: 'work',   pressure: 'maximum',  len: [15, 30], countdown: false, reps: [20, 30], express: [20, 20],
-               rate: { recreational: 32, club: 36, competitive: 40 }, max: 15, set: 5,
-               recover: (r) => 4 * r, setRecover: 3 * M },
-  rung:      { name: 'Rung',         kind: 'steady', pressure: 'moderate, held constant', len: [45, 5 * M], from: 'steady', step: 2, count: 5 },
+  steady:    { name: 'Steady',       kind: 'steady', pressure: 'light to moderate', len: [5 * M, 60 * M], rate: { recreational: [18, 20], club: [18, 20], competitive: [18, 22] } },
+  tempo:     { name: 'Tempo',        kind: 'steady', pressure: 'moderate to hard', len: [4 * M, 12 * M],
+               rate: { recreational: [22, 24], club: [22, 24], competitive: [24, 26] }, recover: () => 2 * M },
+  threshold: { name: 'Threshold',    kind: 'work',   pressure: 'hard',     len: [M, 10 * M],
+               rate: { recreational: [24, 26], club: [26, 28], competitive: [28, 30] },
+               recover: (r) => (r > 8 * M ? 3 * M : 2 * M) },                     // 2 min, 3 min after long pieces
+  race:      { name: 'Race pace',    kind: 'work',   pressure: 'very hard', len: [M, 5 * M],
+               rate: { recreational: [28, 28], club: [30, 32], competitive: [32, 34] },
+               recover: (r) => Math.ceil(r / M) * M },                            // about equal to the piece, in whole minutes
+  sprint:    { name: 'Sprint',       kind: 'work',   pressure: 'maximum',  len: [20, 30], countdown: false,
+               rate: { recreational: 32, club: 36, competitive: 40 }, set: 5,
+               recover: (r) => (r <= 20 ? 90 : 2 * M), setRecover: [3 * M, 5 * M] }, // 1:30, or 2 min after 30 s; 3-5 min between sets of 5
+  rung:      { name: 'Rung',         kind: 'steady', pressure: 'moderate, held constant', len: [30, 5 * M], step: 2, count: 5,
+               climbRest: [M, 3 * M] },                                           // 1-3 min between climbs
   recover:   { name: 'Recover',      kind: 'rest',   pressure: 'light',    rate: { recreational: 18, club: 18, competitive: 18 } },
   cool:      { name: 'Cool-down',    kind: 'cool',   pressure: 'light',    len: [2 * M, 8 * M], rate: { recreational: 18, club: 18, competitive: 18 } },
 };
@@ -58,18 +63,28 @@ export const moduleOf = (word) => WORDS[word]?.detail || 'rate';
 const lo = (w, L) => { const r = WORDS[w].rate[L]; return Array.isArray(r) ? r[0] : r; };
 const hi = (w, L) => { const r = WORDS[w].rate[L]; return Array.isArray(r) ? r[1] : r; };
 
-// ---------- Sessions (sentences) ----------
-// warm: 'short' (no Firm strokes), 'standard' (no Firm strokes), 'firm' (ends on Firm strokes), 'easy' (Easy only)
-// xBelow: length in minutes under which the session uses its Express limits.
+// ---------- Sessions ----------
+// Each session is four facts: its words, its shape, its 15-minute form (start) and the
+// piece length it prefers (prefer) before growing by another piece. bestUpTo: past this
+// length the session keeps scaling, getting more demanding, and says so on its card.
+export const LENGTH = { min: 15, max: 60, step: 5 };
 export const TYPES = [
-  { id: 'recovery',  kind: 'cool',   name: 'Recovery',      desc: 'Light paddle to flush the legs.',        warm: 'easy',     xBelow: 0, effort: 1 },
-  { id: 'steady',    kind: 'steady', name: 'Steady state',  desc: 'Long, easy aerobic base.',               warm: 'short',    xBelow: 0, effort: 1 },
-  { id: 'ladder',    kind: 'steady', name: 'Rate ladder',   desc: 'Same pressure, two strokes up each rung.', warm: 'standard', xBelow: 15, effort: 2 },
-  { id: 'tempo',     kind: 'steady', name: 'Tempo',         desc: 'Sustained and comfortably hard.',        warm: 'standard', xBelow: 20, effort: 2 },
-  { id: 'threshold', kind: 'work',   name: 'Threshold',     desc: 'Long reps just under race effort.',      warm: 'firm',     xBelow: 30, effort: 3 },
-  { id: 'pyramid',   kind: 'work',   name: 'Pyramid',       desc: 'Pieces build up, then step down.',       warm: 'firm',     xBelow: 25, effort: 3 },
-  { id: 'power',     kind: 'work',   name: 'Power sprints', desc: 'Short bursts with full recovery.',       warm: 'firm',     xBelow: 25, effort: 4 },
-  { id: 'vo2',       kind: 'work',   name: '2k pace',       desc: 'Race-rhythm reps with equal rest.',      warm: 'firm',     xBelow: 30, effort: 4 },
+  { id: 'recovery',  kind: 'cool',   name: 'Recovery',      desc: 'Light paddle to flush the legs.',          warm: 'easy',     effort: 1, bestUpTo: 45,
+    shape: 'block', word: 'easy' },
+  { id: 'steady',    kind: 'steady', name: 'Steady state',  desc: 'Long, easy aerobic base.',                 warm: 'short',    effort: 1, bestUpTo: 60,
+    shape: 'block', word: 'steady' },
+  { id: 'ladder',    kind: 'steady', name: 'Rate ladder',   desc: 'Same pressure, two strokes up each rung.', warm: 'standard', effort: 2, bestUpTo: 60,
+    shape: 'ladder', word: 'rung', start: 30, prefer: M, most: 15 },                     // unit per share; up to 3 climbs
+  { id: 'tempo',     kind: 'steady', name: 'Tempo',         desc: 'Sustained and comfortably hard.',          warm: 'standard', effort: 2, bestUpTo: 55,
+    shape: 'equal', word: 'tempo', start: [4 * M, 4 * M], prefer: 8 * M, most: 4 },
+  { id: 'threshold', kind: 'work',   name: 'Threshold',     desc: 'Long reps just under race effort.',        warm: 'firm',     effort: 3, bestUpTo: 60,
+    shape: 'equal', word: 'threshold', start: [3.5 * M, 3.5 * M], prefer: 6 * M, most: 5 },
+  { id: 'pyramid',   kind: 'work',   name: 'Pyramid',       desc: 'Pieces build up, then step down.',         warm: 'firm',     effort: 3, bestUpTo: 45,
+    shape: 'pyramid', word: 'threshold', start: M, prefer: M, most: 4, unitMax: 2.5 * M },  // unit per share; up to 4 levels
+  { id: 'power',     kind: 'work',   name: 'Power sprints', desc: 'Short bursts with full recovery.',         warm: 'firm',     effort: 4, bestUpTo: 45,
+    shape: 'equal', word: 'sprint', start: [20, 20, 20, 20], prefer: 20, most: 30, fixed: true },
+  { id: 'vo2',       kind: 'work',   name: '2k pace',       desc: 'Race-rhythm reps with equal rest.',        warm: 'firm',     effort: 4, bestUpTo: 55,
+    shape: 'equal', word: 'race', start: [M, M, M], prefer: 2 * M, most: 8 },
 ];
 
 // Cover colours show how hard a session is: four effort levels, cool to hot,
@@ -106,6 +121,9 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const r15 = (s) => Math.round(s / 15) * 15;
 const down15 = (s) => Math.floor(s / 15) * 15;
 const down30 = (s) => Math.floor(s / 30) * 30;
+// A coach number at or below s: whole minutes from 5 minutes, half minutes below, tens under a minute.
+export const coachStep = (s) => (s >= 5 * M ? M : s >= M ? 30 : 10);
+const downCoach = (s) => Math.floor(s / coachStep(s)) * coachStep(s);
 const sum = (arr) => arr.reduce((a, s) => a + s.dur, 0);
 const seg = (w, spm, dur, extra = {}) => ({ word: w, name: WORDS[w].name, kind: WORDS[w].kind, spm, dur: Math.round(dur), ...extra });
 
@@ -117,18 +135,16 @@ export const fmt = (sec) => {
 };
 
 // ---------- Warm-up and cool-down lengths ----------
-// Harder main sets get a longer warm-up and cool-down, between fixed floors and ceilings.
-function warmLength(style, T, x) {
-  if (style === 'easy') return r15(clamp(T * 0.1, 2 * M, 5 * M));
-  if (style === 'short') return r15(clamp(T * 0.1, 3 * M, 5 * M));
-  if (style === 'standard') return x ? 3 * M : r15(clamp(T * 0.12, 4 * M, 8 * M));
-  return x ? 4 * M : r15(clamp(T * 0.18, 8 * M, 12 * M));
-}
-function coolLength(style, T, x) {
-  if (style === 'firm') return x ? 2 * M : r15(clamp(T * 0.11, 5 * M, 8 * M));
-  if (style === 'standard') return x ? 2 * M : r15(clamp(T * 0.08, 3 * M, 5 * M));
-  return r15(clamp(T * 0.06, 2 * M, 3 * M));
-}
+// From the library: at most 8 minutes for hard sessions' warm-ups (they include drills and
+// Firm strokes), 6 otherwise; cool-downs 2 to 5. [min, max, share of the session], in minutes.
+const FRAME = {
+  firm:     { warm: [4, 8, 0.15], cool: [2, 5, 0.08] },
+  standard: { warm: [3, 6, 0.10], cool: [2, 5, 0.07] },
+  short:    { warm: [3, 4, 0.07], cool: [2, 3, 0.05] },
+  easy:     { warm: [3, 4, 0.07], cool: [2, 3, 0.05] },
+};
+const half = (s) => Math.round(s / 30) * 30;
+const span3 = (r, T) => clamp(half(r[2] * T * M), r[0] * M, r[1] * M);   // T in minutes
 
 // ---------- Warm-up phrase ----------
 // Pick drill, then Build steps rising by 2 spm while below the main set's rate.
@@ -142,25 +158,26 @@ function warmPhrase(style, total, mainRate, L) {
   const builds = [];
   for (let r = WORDS.build.from; r < ceilRate; r += WORDS.build.step) builds.push(r);
 
-  let pick = clamp(r15(total * 0.3), WORDS.pick.len[0], WORDS.pick.len[1]);
+  let pick = clamp(down30(total * 0.3), WORDS.pick.len[0], WORDS.pick.len[1]);
   let firmT = firm ? (total >= 6 * M ? 90 : WORDS.firm.len[0]) : 0;
   let settle = firm ? WORDS.easy.len[0] : 0;
   const avail = total - pick - firmT - settle;
   // Builds share the time that's left, each within its limits; the top steps go if it's short.
   let n = builds.length;
-  const per = (k) => (k ? clamp(down15(avail / k), WORDS.build.len[0], WORDS.build.len[1]) : 0);
+  const per = (k) => (k ? clamp(down30(avail / k), WORDS.build.len[0], WORDS.build.len[1]) : 0);
   while (n && n * per(n) > avail) n--;
   builds.length = n;
   let buildT = per(n);
   let left = avail - n * buildT;
   // Anything left lengthens the builds, then the pick drill, then the Firm strokes, all within limits.
-  if (n) { const a = Math.min(down15(left / n), WORDS.build.len[1] - buildT); buildT += a; left -= a * n; }
-  { const a = Math.min(left, WORDS.pick.len[1] - pick); pick += a; left -= a; }
-  if (firm) { const a = Math.min(down15(left), WORDS.firm.len[1] - firmT); firmT += a; left -= a; }
+  if (n) { const a = Math.min(down30(left / n), WORDS.build.len[1] - buildT); buildT += a; left -= a * n; }
+  { const a = Math.min(down30(left), WORDS.pick.len[1] - pick); pick += a; left -= a; }
+  if (firm) { const a = Math.min(down30(left), WORDS.firm.len[1] - firmT); firmT += a; left -= a; }
   // Still more: the settle takes it before hard sessions; otherwise it moves to the
   // cool-down, so Easy never sits right next to the pick drill at the same rate.
   let spill = 0;
-  if (firm) settle += left; else spill = left;
+  // The settle takes whole half minutes; any seconds left go to the cool-down.
+  if (firm) { settle += down30(left); spill = left - down30(left); } else spill = left;
   const head = [seg('pick', lo('pick', L), pick)];
   const tail = builds.map((r) => seg('build', r, buildT));
   if (firm) tail.push(seg('firm', firmRate, firmT), seg('easy', lo('easy', L), settle));
@@ -174,96 +191,6 @@ function coolPhrase(total, L, before) {
   return [seg('cool', Math.min(lo('cool', L), before), total)];
 }
 
-// ---------- Main phrases ----------
-// Continuous: blocks of one word within its limits, alternating its low and high rate.
-function continuous(w, main, L, x) {
-  const max = x && WORDS[w].express ? WORDS[w].express[1] : WORDS[w].len[1];
-  const nb = Math.max(1, Math.ceil(main / max));
-  const len = main / nb;
-  return Array.from({ length: nb }, (_, i) => seg(w, i % 2 ? hi(w, L) : lo(w, L), len));
-}
-
-// Repeats (and sets): a work word plus Recover, as many times as fits.
-// Reps add first at their shortest preferred length, then stretch within the range.
-function repeats(w, main, L, x) {
-  const W = WORDS[w];
-  const [rlo, rhi] = x ? W.express : W.reps;
-  const rest = (r) => W.recover(r, x);
-  const span = (n, r) => {
-    let s = n * r + (n - 1) * rest(r);
-    if (W.set && n > W.set) s += Math.floor((n - 1) / W.set) * (W.setRecover - rest(r));
-    return s;
-  };
-  const cap = W.cap || Infinity;
-  let n = 0;
-  while (n < W.max && span(n + 1, rlo) <= main && (n + 1) * rlo <= cap) n++;
-  n = Math.max(1, n);
-  let r = rlo;
-  while (r + 15 <= rhi && span(n, r + 15) <= main && n * (r + 15) <= cap) r += 15;
-  if (r >= 120) r = Math.max(rlo, down30(r));
-  const out = [];
-  for (let i = 0; i < n; i++) {
-    // Threshold progresses from its low to its high rate over the session.
-    const spm = w === 'threshold' ? (i < n / 2 ? lo(w, L) : hi(w, L)) : w === 'race' && i === n - 1 ? hi(w, L) : lo(w, L);
-    out.push(seg(w, spm, r, { rep: i + 1, of: n }));
-    if (i === n - 1) break;
-    const brk = W.set && (i + 1) % W.set === 0;
-    out.push(seg('recover', lo('recover', L), brk ? W.setRecover : rest(r)));
-  }
-  return { set: out, spare: Math.max(0, main - span(n, r)) };
-}
-
-// Pyramid: pieces climb and step back down. Pieces up to 3 minutes are Race pace,
-// longer ones Threshold. Recover is half a piece, lengthened to a full piece with spare time.
-const SHAPES = [[1, 2, 3, 4, 3, 2, 1], [1, 2, 3, 2, 1], [1, 2, 1]];
-function pyramid(main, L) {
-  const cost = (sh) => sh.reduce((a, b) => a + b, 0) + 0.5 * sh.slice(0, -1).reduce((a, b) => a + b, 0);
-  const work = (sh) => sh.reduce((a, b) => a + b, 0);
-  const shape = SHAPES.find((sh) => cost(sh) * 45 <= main) || SHAPES[2];
-  let u = Math.min(90, main / cost(shape), 25 * M / work(shape));
-  u = Math.max(45, down15(u));
-  const restBase = 0.5 * shape.slice(0, -1).reduce((a, b) => a + b, 0) * u;
-  let spare = Math.max(0, main - cost(shape) * u);
-  const scale = spare < 5 * M ? Math.min(2, 1 + spare / restBase) : 1;
-  spare -= restBase * (scale - 1);
-  const out = [];
-  shape.forEach((k, i) => {
-    const len = k * u;
-    const w = len <= 3 * M ? 'race' : 'threshold';
-    // Shorter pieces go faster: the shortest at Race pace high, the longest at Threshold low.
-    const spm = w === 'race' ? (k === 1 ? hi('race', L) : lo('race', L)) : (k >= 4 ? lo('threshold', L) : hi('threshold', L));
-    out.push(seg(w, spm, len, { rep: i + 1, of: shape.length }));
-    if (i < shape.length - 1) out.push(seg('recover', lo('recover', L), Math.max(15, r15((len * scale) / 2))));
-  });
-  return { set: out, spare: Math.max(0, spare) };
-}
-
-// Ladder: Rung intervals rising by 2 spm from Steady's high rate, at constant pressure.
-// Rungs run 45 seconds to 5 minutes. A second climb is added once its rungs would be
-// 2:30 or more, with Recover between climbs.
-function ladder(main, L) {
-  const R = WORDS.rung, start = hi('steady', L);
-  const rates = Array.from({ length: R.count }, (_, i) => start + i * R.step);
-  const len = (c) => (main - (c - 1) * 2 * M) / (c * rates.length);
-  const climbs = len(2) >= 150 ? 2 : 1;
-  const r = clamp(down15(len(climbs)), R.len[0], R.len[1]);
-  const out = [];
-  for (let c = 0; c < climbs; c++) {
-    if (c > 0) out.push(seg('recover', lo('recover', L), 2 * M));
-    rates.forEach((spm, i) => out.push(seg('rung', spm, r, { rep: c * rates.length + i + 1, of: climbs * rates.length })));
-  }
-  return { set: out, spare: Math.max(0, main - climbs * rates.length * r - (climbs - 1) * 2 * M) };
-}
-
-// ---------- Composition ----------
-// First rate of each session's main set, used to size the warm-up before the set exists.
-const MAIN_RATE = {
-  steady: (L) => lo('steady', L), tempo: (L) => lo('tempo', L), threshold: (L) => lo('threshold', L),
-  vo2: (L) => lo('race', L), power: (L) => lo('sprint', L), pyramid: (L) => hi('race', L),
-  ladder: (L) => hi('steady', L), recovery: (L) => lo('easy', L),
-};
-const COOL_MAX = { easy: 3 * M, short: 3 * M, standard: 5 * M, firm: 8 * M };
-
 // The most a warm-up can hold with every word at its upper limit. A warm-up never
 // gets more than this, so it never has to spill time into easy filler.
 function warmCapacity(style, mainRate, L) {
@@ -275,73 +202,154 @@ function warmCapacity(style, mainRate, L) {
   return WORDS.pick.len[1] + builds * WORDS.build.len[1] + (firm ? WORDS.firm.len[1] + 2 * M : 0);
 }
 
-export function buildPlan(id, T, L = 'recreational') {
-  const type = TYPES.find((t) => t.id === id);
-  const x = T < type.xBelow * M;
-  const style = type.warm;
-  const cap = warmCapacity(style, MAIN_RATE[id](L), L);
-  const warmT = Math.min(warmLength(style, T, x), cap);
-  const coolT = Math.min(coolLength(style, T, x), COOL_MAX[style]);
-  const main = T - warmT - coolT;
+// ---------- Growth ----------
+// A shape is a list of pieces. Growth is one sequence of states, from the session's start,
+// each one step: lengthen the piece furthest below its share, or add a piece at its share.
+const shares = (ty, n) => {
+  if (ty.shape === 'pyramid') { const L = (n + 1) / 2; return Array.from({ length: n }, (_, i) => (i < L ? i + 1 : n - i)); }
+  if (ty.shape === 'ladder') { const k = WORDS.rung.count; return Array.from({ length: n }, (_, j) => k - (j % k)); }
+  return Array(n).fill(1);
+};
+const lenMax = (ty) => WORDS[ty.word].len[1];
 
-  let set, spare = 0;
-  if (id === 'steady') set = continuous('steady', main, L, x);
-  else if (id === 'recovery') {
-    // Starts on the lower rate, so the main set reads apart from the easy warm-up.
-    set = continuous('easy', main, L, x).map((sg, i) => ({ ...sg, kind: 'steady', spm: i % 2 ? lo('easy', L) : hi('easy', L) }));
+// The piece furthest below its share (the last such piece, so sets build towards the end;
+// pyramids and ladders take the lowest level first). Lengthening it keeps the shape: mirror
+// pieces in a pyramid and the same rung in every climb change together.
+function lengthen(ty, p) {
+  const sh = shares(ty, p.length);
+  // Candidates, furthest below their share first (ties: the last piece for equal sets, so
+  // they build towards the end; the lowest level for pyramids and ladders).
+  const order = p.map((_, i) => i).sort((a, b) => (p[a] / sh[a] - p[b] / sh[b]) || (ty.shape === 'equal' ? b - a : a - b));
+  for (const k of order) {
+    const l = p[k] + coachStep(p[k]);
+    if (l > lenMax(ty) || (ty.unitMax && l / sh[k] > ty.unitMax)) continue;
+    const q = [...p];
+    if (ty.shape === 'pyramid') { q[k] = l; q[p.length - 1 - k] = l; }
+    else if (ty.shape === 'ladder') { const kk = WORDS.rung.count; for (let j = k % kk; j < q.length; j += kk) q[j] = l; }
+    else q[k] = l;
+    // Pyramids rise to the peak and ladders descend within a climb, strictly.
+    const L = (q.length + 1) / 2;
+    if (ty.shape === 'pyramid' && q.slice(0, L).some((v, j) => j && v <= q[j - 1])) continue;
+    if (ty.shape === 'ladder' && q.slice(0, WORDS.rung.count).some((v, j) => j && v >= q[j - 1])) continue;
+    return q;
   }
-  else if (id === 'tempo') {
-    const over = Math.max(0, main - WORDS.tempo.cap);
-    set = continuous('tempo', main - over, L, x);
-    spare = over;
-  } else if (id === 'threshold') ({ set, spare } = repeats('threshold', main, L, x));
-  else if (id === 'vo2') ({ set, spare } = repeats('race', main, L, x));
-  else if (id === 'power') ({ set, spare } = repeats('sprint', main, L, x));
-  else if (id === 'pyramid') ({ set, spare } = pyramid(main, L));
-  else if (id === 'ladder') ({ set, spare } = ladder(main, L));
-
-  // Spare time: a Steady block if it's 5 minutes or more. Otherwise it lengthens the
-  // warm-up and cool-down up to their limits, and anything beyond goes back into the
-  // main set (longer blocks, or longer Recover between efforts).
-  let steadyBlock = null, warmExtra = 0, coolExtra = 0, back = 0;
-  // Long Steady time is split into blocks within Steady's limits, alternating its rates.
-  if (spare >= 5 * M && style !== 'easy') steadyBlock = continuous('steady', spare, L, false);
-  else if (spare > 0) {
-    warmExtra = Math.min(spare, cap - warmT);
-    coolExtra = Math.min(spare - warmExtra, COOL_MAX[style] - coolT);
-    back = spare - warmExtra - coolExtra;
-  }
-  if (back > 0) {
-    const rests = set.filter((sg) => sg.word === 'recover');
-    if (rests.length) rests.forEach((sg) => { sg.dur += back / rests.length; });
-    else if (id === 'tempo') {
-      // Tempo is at its cap, so the extra can't be more Tempo: it becomes a 5-minute
-      // Steady block, borrowing the difference from the Tempo blocks.
-      const borrow = 5 * M - back;
-      set.forEach((sg) => { sg.dur -= borrow / set.length; });
-      steadyBlock = [seg('steady', lo('steady', L), 5 * M)];
-    } else set.forEach((sg) => { sg.dur += back / set.length; });
-  }
-
-  const mainRate = set[0].spm;
-  const warm = warmPhrase(style, warmT + warmExtra, mainRate, L);
-  const segs = [...warm.head, ...(steadyBlock || []), ...warm.tail, ...set,
-    ...coolPhrase(coolT + coolExtra + (warm.spill || 0), L, set[set.length - 1].spm)];
-  return fit(segs, T, x);
+  return null;
 }
 
-// Round each interval and absorb drift in the last one, so the plan adds up exactly.
-function fit(segs, T, express) {
-  for (let i = segs.length - 1; i > 0; i--) {
-    const a = segs[i - 1], b = segs[i];
-    if (a.word === b.word && a.spm === b.spm && !a.rep && !b.rep) { a.dur += b.dur; segs.splice(i, 1); }
+// One more piece at its share: equal pieces share the existing work over one more piece
+// (never less work); a pyramid gains a level; a ladder its next rung; sprints one sprint.
+function add(ty, p) {
+  if (ty.shape === 'equal') {
+    const n = p.length + 1;
+    if (n > ty.most) return null;
+    if (ty.fixed) return [...p, ty.prefer];
+    const W = p.reduce((a, b) => a + b, 0);
+    let l = W / n; l = Math.floor(l / coachStep(l)) * coachStep(l);
+    if (l < WORDS[ty.word].len[0] || l < ty.start[0]) return null;
+    const q = Array(n).fill(l);
+    for (let k = n - 1; q.reduce((a, b) => a + b, 0) < W; k = (k - 1 + n) % n) q[k] += coachStep(q[k]);
+    return q;
   }
-  segs.forEach((s) => { s.dur = Math.max(15, s.dur >= 120 ? r15(s.dur) : Math.round(s.dur / 5) * 5); });
-  const last = segs[segs.length - 1];
-  last.dur = Math.max(30, last.dur + (T - sum(segs)));
-  segs.express = express;
+  if (ty.shape === 'pyramid') {
+    const L = (p.length + 1) / 2;
+    if (L + 1 > ty.most) return null;
+    const up = p.slice(0, L);
+    return [...up, half((L + 1) * p[0]), ...up.slice().reverse()];
+  }
+  if (p.length + 1 > ty.most) return null;
+  return [...p, p[p.length % WORDS.rung.count]];
+}
+
+const unitOf = (ty, p) => (ty.shape === 'equal' ? Math.min(...p) : p[0] / shares(ty, p.length)[0]);
+function startOf(ty) {
+  if (ty.shape === 'pyramid') return [ty.start, 2 * ty.start, ty.start];
+  if (ty.shape === 'ladder') return shares(ty, WORDS.rung.count).map((s) => s * ty.start);
+  return [...ty.start];
+}
+// The session's whole growth: lengthen until pieces reach the preferred length, then add.
+const GROWTH = {};
+export function growth(id) {
+  if (GROWTH[id]) return GROWTH[id];
+  const ty = TYPES.find((t) => t.id === id);
+  const out = [{ op: 'start', pieces: startOf(ty) }];
+  for (let guard = 0; guard < 400; guard++) {
+    const p = out[out.length - 1].pieces;
+    const ready = unitOf(ty, p) >= ty.prefer;
+    const tryOps = ready ? [['add', add], ['lengthen', lengthen]] : [['lengthen', lengthen], ['add', add]];
+    let next = null, op = null;
+    for (const [name, f] of tryOps) { next = f(ty, p); if (next) { op = name; break; } }
+    if (!next) break;
+    out.push({ op, pieces: next });
+  }
+  return (GROWTH[id] = out);
+}
+
+// ---------- Rendering a main set ----------
+function mainSet(ty, p, L) {
+  const W = WORDS[ty.word], n = p.length, out = [];
+  p.forEach((d, i) => {
+    let spm;
+    if (ty.shape === 'ladder') spm = hi('steady', L) + (i % WORDS.rung.count) * WORDS.rung.step;
+    else if (ty.id === 'pyramid') spm = hi('threshold', L);
+    else if (ty.word === 'threshold') spm = i < n / 2 ? lo('threshold', L) : hi('threshold', L);   // progresses over the set
+    else if (ty.word === 'race') spm = i === n - 1 ? hi('race', L) : lo('race', L);                 // the last one faster
+    else if (ty.word === 'tempo') spm = i % 2 ? hi('tempo', L) : lo('tempo', L);                    // alternating
+    else spm = lo(ty.word, L);
+    out.push(seg(ty.word, spm, d, { rep: i + 1, of: n }));
+    if (i === n - 1) return;
+    let rest;
+    let block = false;
+    if (ty.shape === 'ladder') { if ((i + 1) % WORDS.rung.count) return; rest = WORDS.rung.climbRest[0]; block = true; }   // between climbs
+    else if (ty.shape === 'pyramid') rest = Math.max(M, Math.floor(p[0] / M) * M);                   // one step, in whole minutes
+    else if (W.set && (i + 1) % W.set === 0) { rest = W.setRecover[0]; block = true; }               // between sets of sprints
+    else rest = W.recover(d);                                                                        // follows its piece
+    out.push(seg('recover', lo('recover', L), rest, block ? { block: true } : {}));
+  });
+  return out;
+}
+
+// ---------- Composition ----------
+export function buildPlan(id, T, L = 'recreational') {
+  const ty = TYPES.find((t) => t.id === id);
+  T = clamp(T, LENGTH.min * M, LENGTH.max * M);
+  const f = FRAME[ty.warm], tm = T / M;
+  let warmT = span3(f.warm, tm), coolT = span3(f.cool, tm);
+  // A warm-up never starts longer than its steps can hold; the main set gets the difference.
+  const firstRate = ty.shape === 'block' ? lo(ty.word, L) : mainSet(ty, growth(id)[0].pieces, L)[0].spm;
+  warmT = Math.min(warmT, Math.max(f.warm[0] * M, warmCapacity(ty.warm, firstRate, L)));
+  const main = T - warmT - coolT;
+  let set;
+  if (ty.shape === 'block') {
+    const len = Math.floor(main / M) * M;
+    set = [seg(ty.word, ty.word === 'easy' ? hi('easy', L) : lo(ty.word, L), len)];
+  } else {
+    let p = growth(id)[0].pieces;
+    for (const g of growth(id)) { if (sum(mainSet(ty, g.pieces, L)) > main) break; p = g.pieces; }
+    set = mainSet(ty, p, L);
+  }
+  // Leftover time, in order: rests between blocks, the warm-up's steps, the cool-down.
+  let left = main - sum(set);
+  const mainRate = set[0].spm;
+  const blocks = set.filter((sg) => sg.block);
+  if (blocks.length && left > 0) {
+    const range = ty.shape === 'ladder' ? WORDS.rung.climbRest : WORDS[ty.word].setRecover;
+    const add = Math.min(Math.floor(left / blocks.length / 30) * 30, range[1] - blocks[0].dur);
+    if (add > 0) { blocks.forEach((sg) => { sg.dur += add; }); left -= add * blocks.length; }
+  }
+  const cap = Math.min(f.warm[1] * M, warmCapacity(ty.warm, mainRate, L));
+  const easyRun = (w) => Math.max(0, ...[...w.head, ...w.tail].filter((sg) => sg.word === 'easy').map((sg) => sg.dur));
+  let extra = 0;
+  for (let a = 30; a <= left && warmT + a <= cap; a += 30) {
+    const w = warmPhrase(ty.warm, warmT + a, mainRate, L);
+    if (w.spill || (ty.warm !== 'easy' && easyRun(w) > 4 * M)) break;
+    extra = a;
+  }
+  warmT += extra; left -= extra;
+  coolT += left;
+  const warm = warmPhrase(ty.warm, warmT, mainRate, L);
+  const segs = [...warm.head, ...warm.tail, ...set, ...coolPhrase(coolT + (warm.spill || 0), L, set[set.length - 1].spm)];
+  segs.beyond = T > ty.bestUpTo * M;
   return segs;
 }
 
-export const isExpress = (id, T) => !!buildPlan(id, T).express;
 export const planTotal = sum;
