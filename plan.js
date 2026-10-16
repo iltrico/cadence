@@ -1,6 +1,7 @@
 // Cadence planner, built on a small grammar.
 //
 // 1. WORDS are the only intervals a plan can contain, each with a rate and length limits.
+//    A word's rate can ease as its pieces get longer (ease).
 // 2. SHAPES: each session's main set has one shape it keeps at every length: one block,
 //    equal pieces, a pyramid (1:2:3:4:3:2:1) or a ladder (climbs of 5:4:3:2:1 rungs).
 // 3. GROWTH: a session starts from its 15-minute form and grows in two ways only:
@@ -38,17 +39,18 @@ export const WORDS = {
   build:     { name: 'Build',        kind: 'warm',   pressure: 'light to moderate', len: [M, 3 * M], from: 20, step: 2 },
   firm:      { name: 'Firm strokes', kind: 'warm',   pressure: 'firm',     len: [M, 2 * M],       rate: { recreational: 24, club: 26, competitive: 28 } },
   steady:    { name: 'Steady',       kind: 'steady', pressure: 'light to moderate', len: [5 * M, 60 * M], rate: { recreational: [18, 20], club: [18, 20], competitive: [18, 22] } },
-  tempo:     { name: 'Tempo',        kind: 'steady', pressure: 'moderate to hard', len: [4 * M, 12 * M],
+  tempo:     { name: 'Tempo',        kind: 'steady', pressure: 'moderate to hard', len: [4 * M, 15 * M],
                rate: { recreational: [22, 24], club: [22, 24], competitive: [24, 26] }, recover: () => 2 * M },
   threshold: { name: 'Threshold',    kind: 'work',   pressure: 'hard',     len: [M, 10 * M],
                rate: { recreational: [24, 26], club: [26, 28], competitive: [28, 30] },
                recover: (r) => (r > 8 * M ? 3 * M : 2 * M) },                     // 2 min, 3 min after long pieces
-  race:      { name: 'Race pace',    kind: 'work',   pressure: 'very hard', len: [M, 5 * M],
+  race:      { name: 'Race pace',    kind: 'work',   pressure: 'very hard', len: [M, 6 * M],
                rate: { recreational: [28, 28], club: [30, 32], competitive: [32, 34] },
-               recover: (r) => Math.ceil(r / M) * M },                            // about equal to the piece, in whole minutes
+               ease: { after: 3 * M, by: 2 },                                     // 2k pace up to 3 min, 5k pace beyond
+               recover: (r) => Math.max(M, Math.round((0.8 * r) / M) * M) },       // about 80% of the piece, in whole minutes
   sprint:    { name: 'Sprint',       kind: 'work',   pressure: 'maximum',  len: [20, 30], countdown: false,
                rate: { recreational: 32, club: 36, competitive: 40 }, set: 5,
-               recover: (r) => (r <= 20 ? 90 : 2 * M), setRecover: [3 * M, 5 * M] }, // 1:30, or 2 min after 30 s; 3-5 min between sets of 5
+               recover: () => M, setRecover: [3 * M, 5 * M] },                     // 1 min; 3-5 min between sets of 5
   rung:      { name: 'Rung',         kind: 'steady', pressure: 'moderate, held constant', len: [30, 5 * M], step: 2, count: 5,
                climbRest: [M, 3 * M] },                                           // 1-3 min between climbs
   recover:   { name: 'Recover',      kind: 'rest',   pressure: 'light',    rate: { recreational: 18, club: 18, competitive: 18 } },
@@ -76,15 +78,15 @@ export const TYPES = [
   { id: 'ladder',    kind: 'steady', name: 'Rate ladder',   desc: 'Same pressure, two strokes up each rung.', warm: 'standard', effort: 2, bestUpTo: 60,
     shape: 'ladder', word: 'rung', start: 30, prefer: M, most: 15 },                     // unit per share; up to 3 climbs
   { id: 'tempo',     kind: 'steady', name: 'Tempo',         desc: 'Sustained and comfortably hard.',          warm: 'standard', effort: 2, bestUpTo: 55,
-    shape: 'equal', word: 'tempo', start: [4 * M, 4 * M], prefer: 8 * M, most: 4 },
+    shape: 'equal', word: 'tempo', start: [4 * M, 4 * M], prefer: 10 * M, most: 3 },
   { id: 'threshold', kind: 'work',   name: 'Threshold',     desc: 'Long reps just under race effort.',        warm: 'firm',     effort: 3, bestUpTo: 60,
-    shape: 'equal', word: 'threshold', start: [3.5 * M, 3.5 * M], prefer: 6 * M, most: 5 },
+    shape: 'equal', word: 'threshold', start: [3.5 * M, 3.5 * M], prefer: 8 * M, most: 4 },
   { id: 'pyramid',   kind: 'work',   name: 'Pyramid',       desc: 'Pieces build up, then step down.',         warm: 'firm',     effort: 3, bestUpTo: 45,
     shape: 'pyramid', word: 'threshold', start: M, prefer: M, most: 4, unitMax: 2.5 * M },  // unit per share; up to 4 levels
-  { id: 'power',     kind: 'work',   name: 'Power sprints', desc: 'Short bursts with full recovery.',         warm: 'firm',     effort: 4, bestUpTo: 45,
-    shape: 'equal', word: 'sprint', start: [20, 20, 20, 20], prefer: 20, most: 30, fixed: true },
-  { id: 'vo2',       kind: 'work',   name: '2k pace',       desc: 'Race-rhythm reps with equal rest.',        warm: 'firm',     effort: 4, bestUpTo: 55,
-    shape: 'equal', word: 'race', start: [M, M, M], prefer: 2 * M, most: 8 },
+  { id: 'power',     kind: 'work',   name: 'Power sprints', desc: 'Short all-out bursts in sets of five.',    warm: 'firm',     effort: 4, bestUpTo: 45,
+    shape: 'equal', word: 'sprint', start: [20, 20, 20, 20], prefer: 30, most: 30, fixed: true },
+  { id: 'vo2',       kind: 'work',   name: 'Race pace',     desc: 'From 2k to 5k pace as the pieces lengthen.', warm: 'firm',   effort: 4, bestUpTo: 60,
+    shape: 'equal', word: 'race', start: [M, M, M], prefer: 2 * M, most: 5 },
 ];
 
 // Cover colours show how hard a session is: four effort levels, cool to hot,
@@ -105,7 +107,7 @@ export function rateLabel(id, L = 'recreational') {
     case 'steady': return span(lo('steady', L), hi('steady', L));
     case 'tempo': return span(lo('tempo', L), hi('tempo', L));
     case 'threshold': return span(lo('threshold', L), hi('threshold', L));
-    case 'vo2': return span(lo('race', L), hi('race', L));
+    case 'vo2': return span(lo('race', L) - WORDS.race.ease.by, hi('race', L));
     case 'power': return span(lo('sprint', L), hi('sprint', L));
     case 'pyramid': return span(lo('threshold', L), hi('race', L));
     case 'ladder': return span(hi('steady', L), hi('steady', L) + 8);
@@ -292,6 +294,7 @@ function mainSet(ty, p, L) {
     if (ty.shape === 'ladder') spm = hi('steady', L) + (i % WORDS.rung.count) * WORDS.rung.step;
     else if (ty.id === 'pyramid') spm = hi('threshold', L);
     else if (ty.word === 'threshold') spm = i < n / 2 ? lo('threshold', L) : hi('threshold', L);   // progresses over the set
+    else if (W.ease && d > W.ease.after) spm = lo(ty.word, L) - W.ease.by;                         // eases on longer pieces
     else if (ty.word === 'race') spm = i === n - 1 ? hi('race', L) : lo('race', L);                 // the last one faster
     else if (ty.word === 'tempo') spm = i % 2 ? hi('tempo', L) : lo('tempo', L);                    // alternating
     else spm = lo(ty.word, L);

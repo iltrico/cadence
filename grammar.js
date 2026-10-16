@@ -95,7 +95,10 @@ export function validatePlan(plan, id, T, L = 'recreational') {
     if (w === 'rung') return;
     if (w === 'cool') { if (s.spm < 16 || s.spm > range('cool', L)[1]) fail(`cool-down rate ${s.spm}`, i); return; }
     const [a, b] = range(w, L);
-    if (w === 'firm' ? s.spm > b : (s.spm < a || s.spm > b)) fail(`rate ${s.spm} outside ${a}–${b}`, i);
+    const eased = WORDS[w].ease && s.dur > WORDS[w].ease.after;
+    const lowest = eased ? a - WORDS[w].ease.by : a;
+    if (eased && s.spm !== lowest) fail(`rate ${s.spm}, expected ${lowest} on a piece over ${WORDS[w].ease.after}s`, i);
+    if (w === 'firm' ? s.spm > b : (s.spm < lowest || s.spm > b)) fail(`rate ${s.spm} outside ${lowest}–${b}`, i);
   });
 
   // 10. Every change of display module has a designed transition.
