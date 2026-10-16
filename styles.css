@@ -134,9 +134,15 @@ input { user-select: text; -webkit-user-select: text; }
 }
 .back-list::-webkit-scrollbar { display: none; }
 /* A compact table that fits the card: names wrap only between words. */
-.plan.back-list li { grid-template-columns: 2.5rem 0.55rem minmax(0, 1fr) auto; gap: var(--s8); padding: var(--s8) 0; align-items: baseline; }
-.plan.back-list .p-dot { align-self: center; }
-.plan.back-list .p-name { font-weight: 600; line-height: 1.3; }
+/* Outline rows: start time | a dotted line for the work and one for its rest | duration over rate */
+.plan.back-list li { grid-template-columns: 2.5rem minmax(0, 1fr) auto; gap: var(--s8); padding: var(--s8) 0; align-items: start; }
+.plan.back-list .p-at { padding-top: 0.1rem; }
+.plan.back-list .p-what, .plan.back-list .p-how { display: grid; gap: 0.1rem; }
+.plan.back-list .p-how { text-align: right; justify-items: end; }
+.plan.back-list .p-line { display: grid; grid-template-columns: 0.55rem minmax(0, 1fr); gap: var(--s8); align-items: baseline; }
+.plan.back-list .p-line .p-dot { transform: translateY(-0.05rem); }
+.plan.back-list .p-name { font-weight: 700; line-height: 1.3; }
+.plan.back-list .p-rest, .plan.back-list .p-spm { color: var(--muted); font-size: 0.8125rem; line-height: 1.35; }
 .plan.back-list .p-at, .plan.back-list .p-spm { font-size: 0.8125rem; }
 .plan.back-list .p-name, .plan.back-list .p-dur { font-size: 0.9375rem; }
 .plan.back-list .p-name { overflow-wrap: normal; hyphens: manual; -webkit-hyphens: manual; }

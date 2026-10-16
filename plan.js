@@ -3,7 +3,8 @@
 // 1. WORDS are the only intervals a plan can contain, each with a rate and length limits.
 //    A word's rate can ease as its pieces get longer (ease).
 // 2. SHAPES: each session's main set has one shape it keeps at every length: one block,
-//    equal pieces, a pyramid (1:2:3:4:3:2:1) or a ladder (climbs of 5:4:3:2:1 rungs).
+//    equal pieces, equal sets (equal pieces, nested), a pyramid (1:2:3:4:3:2:1) or a ladder
+//    (climbs of 5:4:3:2:1 rungs).
 // 3. GROWTH: a session starts from its 15-minute form and grows in two ways only:
 //    lengthen the piece furthest below its share of the shape, by one coach step, or add a
 //    piece at its share. It lengthens until pieces reach the session's preferred length,
@@ -50,7 +51,7 @@ export const WORDS = {
                recover: (r) => Math.max(M, Math.round((0.8 * r) / M) * M) },       // about 80% of the piece, in whole minutes
   sprint:    { name: 'Sprint',       kind: 'work',   pressure: 'maximum',  len: [20, 30], countdown: false,
                rate: { recreational: 32, club: 36, competitive: 40 }, set: 5,
-               recover: () => M, setRecover: [3 * M, 5 * M] },                     // 1 min; 3-5 min between sets of 5
+               recover: () => M, setRecover: [3 * M, 5 * M] },                     // 1 min; 3-5 min between sets
   rung:      { name: 'Rung',         kind: 'steady', pressure: 'moderate, held constant', len: [30, 5 * M], step: 2, count: 5,
                climbRest: [M, 3 * M] },                                           // 1-3 min between climbs
   recover:   { name: 'Recover',      kind: 'rest',   pressure: 'light',    rate: { recreational: 18, club: 18, competitive: 18 } },
@@ -83,7 +84,7 @@ export const TYPES = [
   { id: 'pyramid',   kind: 'work',   name: 'Pyramid',       desc: 'Pieces build up, then step down.',         warm: 'firm',     effort: 3,
     shape: 'pyramid', word: 'threshold', start: M, prefer: M, most: 4, unitMax: 2.5 * M },  // unit per share; up to 4 levels
   { id: 'power',     kind: 'work',   name: 'Power sprints', desc: 'Short all-out bursts in sets of five.',    warm: 'firm',     effort: 4,
-    shape: 'equal', word: 'sprint', start: [20, 20, 20, 20], prefer: 30, most: 30, fixed: true },
+    shape: 'sets', word: 'sprint', start: { sets: 1, per: 4, len: 20 }, prefer: 30, per: [4, 6], most: 5 },
   { id: 'vo2',       kind: 'work',   name: 'Race pace',     desc: 'From 2k to 5k pace as the pieces lengthen.', warm: 'firm',   effort: 4,
     shape: 'equal', word: 'race', start: [M, M, M], prefer: 2 * M, most: 5 },
 ];
@@ -261,6 +262,23 @@ function add(ty, p) {
   return [...p, p[p.length % WORDS.rung.count]];
 }
 
+// Equal sets grow by the same two moves, one level up: lengthen (each sprint to its preferred
+// length, then one more sprint in every set) or add (the same sprints shared over one more set).
+const setsOf = (sets, per, len) => Object.assign(Array(sets * per).fill(len), { per });
+function setsGrowth(ty) {
+  let { sets, per, len } = ty.start;
+  const out = [{ op: 'start', pieces: setsOf(sets, per, len) }];
+  for (let guard = 0; guard < 100; guard++) {
+    let op;
+    if (len < ty.prefer) { len += coachStep(len); op = 'lengthen'; }
+    else if (per < ty.per[1]) { per++; op = 'lengthen'; }
+    else if (sets < ty.most) { const total = sets * per; sets++; per = Math.max(ty.per[0], Math.ceil(total / sets)); op = 'add'; }
+    else break;
+    out.push({ op, pieces: setsOf(sets, per, len) });
+  }
+  return out;
+}
+
 const unitOf = (ty, p) => (ty.shape === 'equal' ? Math.min(...p) : p[0] / shares(ty, p.length)[0]);
 function startOf(ty) {
   if (ty.shape === 'pyramid') return [ty.start, 2 * ty.start, ty.start];
@@ -272,6 +290,7 @@ const GROWTH = {};
 export function growth(id) {
   if (GROWTH[id]) return GROWTH[id];
   const ty = TYPES.find((t) => t.id === id);
+  if (ty.shape === 'sets') return (GROWTH[id] = setsGrowth(ty));
   const out = [{ op: 'start', pieces: startOf(ty) }];
   for (let guard = 0; guard < 400; guard++) {
     const p = out[out.length - 1].pieces;
@@ -303,7 +322,7 @@ function mainSet(ty, p, L) {
     let block = false;
     if (ty.shape === 'ladder') { if ((i + 1) % WORDS.rung.count) return; rest = WORDS.rung.climbRest[0]; block = true; }   // between climbs
     else if (ty.shape === 'pyramid') rest = Math.max(M, Math.floor(p[0] / M) * M);                   // one step, in whole minutes
-    else if (W.set && (i + 1) % W.set === 0) { rest = W.setRecover[0]; block = true; }               // between sets of sprints
+    else if (ty.shape === 'sets' && (i + 1) % p.per === 0) { rest = W.setRecover[0]; block = true; } // between sets
     else rest = W.recover(d);                                                                        // follows its piece
     out.push(seg('recover', lo('recover', L), rest, block ? { block: true } : {}));
   });

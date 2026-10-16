@@ -1,101 +1,77 @@
-// Plan outline: how a plan is written on the back of its card, the way a coach writes a
-// session on a whiteboard. It only changes how a plan is shown; the plan, the plan bar and
-// the workout screens use the intervals as they are.
+// Plan outline: how a plan is written on the back of its card. It only changes how a plan
+// is shown; the plan, the plan bar and the workout screens use the intervals as they are.
 //
-// Rows: the warm-up (one row, its parts named), one row per group of the main set (a run
-// of identical pieces, a set of sprints, a ladder climb, a pyramid), a row for each rest
-// between blocks, and the cool-down. Every interval belongs to exactly one row.
+// 1. One row per run of identical pieces (same word, length and rate, and the same rest).
+//    Different lengths or rates make separate rows, including each warm-up step.
+// 2. A piece's rest stays on its row, as a second line. Rests between blocks (between
+//    ladder climbs) get their own row.
+// 3. Equal sets are written once, with their count; the break between sets joins the rest line.
+// Every interval belongs to exactly one row.
 
-const WARM = ['pick', 'easy', 'build', 'firm'];
 const M = 60;
+const NB = '\u00a0';
 
-// Values never break across lines: a no-break space before units, a word joiner after dashes.
-const NB = '\u00a0', DASH = '–\u2060';
-// Human durations: 30 s, 8 min, 3:30. Ranges: 9–10 min, 3:00–3:30.
+// Human durations: 30 s, 8 min, 3:30. Values never break across lines.
 export function dur(s) {
   if (s < M) return `${s}${NB}s`;
   return s % M ? `${Math.floor(s / M)}:${String(s % M).padStart(2, '0')}` : `${s / M}${NB}min`;
-}
-function durRange(values) {
-  const lo = Math.min(...values), hi = Math.max(...values);
-  if (lo === hi) return dur(lo);
-  if (lo % M === 0 && hi % M === 0) return `${lo / M}${DASH}${hi / M}${NB}min`;
-  const mss = (v) => `${Math.floor(v / M)}:${String(v % M).padStart(2, '0')}`;
-  return `${mss(lo)}${DASH}${mss(hi)}`;
-}
-const stepsText = (pieces) => pieces.map((d) => (d % M ? `${Math.floor(d / M)}:${String(d % M).padStart(2, '0')}` : d / M)).join('-\u2060');
-
-// Rates: one value, a progression (24–26) or an alternation (22/24).
-function rateText(segs) {
-  const r = segs.map((s) => s.spm), uniq = [...new Set(r)];
-  if (uniq.length === 1) return `${uniq[0]}`;
-  // Alternation needs at least three values going back and forth (22, 24, 22); two rising
-  // values are a progression.
-  const alternating = r.length >= 3 && uniq.length === 2 && r.every((v, i) => i === 0 || v !== r[i - 1]);
-  return alternating ? `${r[0]}/\u2060${r[1]}` : `${Math.min(...r)}${DASH}${Math.max(...r)}`;
 }
 
 // text(key, vars) translates; name(seg) gives a word's shown name.
 export function outline(plan, type, text, name) {
   const rows = [];
-  let at = 0, i = 0;
-  const push = (kind, from, to, label) => {
-    const segs = plan.slice(from, to), d = segs.reduce((a, s) => a + s.dur, 0);
-    rows.push({ kind, start: at, dur: d, label, from, to });
+  let at = 0;
+  const push = (from, to, fields) => {
+    const d = plan.slice(from, to).reduce((a, s) => a + s.dur, 0);
+    rows.push({ start: at, dur: d, from, to, ...fields });
     at += d;
   };
-  // Warm-up: one row, its parts in order (Build with its rate range).
-  const warmEnd = type.shape === 'block' ? plan.length - 2 : (() => { let k = 0; while (k < plan.length - 1 && WARM.includes(plan[k].word)) k++; return k; })();
-  if (warmEnd > 0) {
-    const parts = [], warm = plan.slice(0, warmEnd);
-    for (const w of ['pick', 'build', 'firm']) {
-      const ws = warm.filter((s) => s.word === w);
-      if (!ws.length) continue;
-      parts.push(w === 'build' ? `${name(ws[0])} ${rateText(ws)}` : name(ws[0]));
-    }
-    if (!parts.length) parts.push(name(warm[0]));
-    push('warm', 0, warmEnd, text('ol.warm', { time: dur(warm.reduce((a, s) => a + s.dur, 0)), parts: parts.join(', ') }));
-  }
-  i = warmEnd;
+  const rate = (s) => `${s.spm}${NB}${text('spm')}`;
   const end = plan.length - 1;
-  // Main set, split at rests between blocks.
-  while (i < end) {
-    if (plan[i].word === 'recover' && plan[i].block) { push('rest', i, i + 1, text('ol.rest', { time: dur(plan[i].dur) })); i++; continue; }
-    let j = i;
-    while (j < end && !(plan[j].word === 'recover' && plan[j].block)) j++;
-    const group = plan.slice(i, j), work = group.filter((s) => s.word !== 'recover'), rests = group.filter((s) => s.word === 'recover');
-    if (type.shape === 'block') {
-      push('work', i, j, text('ol.block', { len: dur(work[0].dur), word: name(work[0]), rate: rateText(work) }));
-    } else if (type.shape === 'ladder') {
-      const label = work.length === 1
-        ? text('ol.block', { len: dur(work[0].dur), word: name(work[0]), rate: `${work[0].spm}` })
-        : text('ol.climb', { steps: stepsText(work.map((s) => s.dur)), from: work[0].spm, to: work[work.length - 1].spm });
-      push('work', i, j, label);
-    } else if (type.shape === 'pyramid') {
-      push('work', i, j, text('ol.steps', { steps: stepsText(work.map((s) => s.dur)), word: name(work[0]), rate: rateText(work), rest: durRange(rests.map((s) => s.dur)) }));
-    } else {
-      // Equal pieces: one row per run of the same rate when the word's rate eases with length
-      // (2k then 5k pace), otherwise one row for the group.
-      const runs = [];
-      let k = i;
-      while (k < j) {
-        let m = k + 1;
-        if (plan[k].word !== 'recover') {
-          const eases = work.length && plan[k].word === 'race';
-          while (m < j && (plan[m].word === 'recover' || !eases || plan[m].spm === plan[k].spm)) m++;
-          // A run ends after its last piece; the rest that follows belongs to it unless it's the last.
-          if (m < j && plan[m - 1].word !== 'recover') { /* m is a piece of a new run */ }
-        }
-        runs.push([k, m]); k = m;
-      }
-      for (const [a, b] of runs) {
-        const rs = plan.slice(a, b), w = rs.filter((s) => s.word !== 'recover'), r = rs.filter((s) => s.word === 'recover');
-        const vars = { n: w.length, len: durRange(w.map((s) => s.dur)), word: name(w[0]), rate: rateText(w) };
-        push('work', a, b, r.length ? text('ol.repsRest', { ...vars, rest: durRange(r.map((s) => s.dur)) }) : text(w.length > 1 ? 'ol.reps' : 'ol.block', vars));
-      }
-    }
-    i = j;
+  let i = 0;
+
+  // Equal sets: one row for every set, from the first sprint to the end of the last set.
+  if (type.shape === 'sets') {
+    while (i < end && plan[i].word !== type.word) { push(i, i + 1, { kind: plan[i].kind, name: name(plan[i]), len: dur(plan[i].dur), rate: rate(plan[i]) }); i++; }
+    const work = plan.slice(i, end).filter((s) => s.word === type.word);
+    const breaks = plan.slice(i, end).filter((s) => s.block);
+    const sets = breaks.length + 1, per = work.length / sets;
+    const inner = plan.slice(i, end).find((s) => s.word === 'recover' && !s.block);
+    const restLine = breaks.length
+      ? text('ol.setsRest', { rest: dur(inner.dur), brk: dur(breaks[0].dur) })
+      : inner ? text('ol.restLine', { rest: dur(inner.dur) }) : null;
+    push(i, end, {
+      kind: work[0].kind, name: sets > 1 ? text('ol.sets', { s: sets, n: per, word: name(work[0]) }) : text('ol.times', { n: per, word: name(work[0]) }),
+      rest: restLine, len: dur(work[0].dur), rate: rate(work[0]),
+    });
+    push(end, plan.length, { kind: plan[end].kind, name: name(plan[end]), len: dur(plan[end].dur), rate: rate(plan[end]) });
+    return rows;
   }
-  push('cool', end, plan.length, text('ol.cool', { time: dur(plan[end].dur) }));
+
+  // Units: each piece with the rest that follows it, or a rest between blocks on its own.
+  const units = [];
+  for (let k = i; k < end;) {
+    const piece = plan[k], next = plan[k + 1];
+    if (piece.word === 'recover') { units.push({ from: k, to: k + 1, rest: piece, between: true }); k++; continue; }
+    const rest = next && k + 1 < end && next.word === 'recover' && !next.block ? next : null;
+    units.push({ from: k, to: k + (rest ? 2 : 1), piece, rest });
+    k += rest ? 2 : 1;
+  }
+  // Rows: neighbouring units with the same piece (word, length, rate) and the same rest join.
+  // The last unit of a run may have no rest: the run simply ends there.
+  const same = (a, b) => a.piece && b.piece && a.piece.word === b.piece.word && a.piece.dur === b.piece.dur && a.piece.spm === b.piece.spm;
+  for (let u = 0; u < units.length;) {
+    const first = units[u];
+    if (first.between) { push(first.from, first.to, { kind: 'rest', name: text('ol.rest'), len: dur(first.rest.dur) }); u++; continue; }
+    let v = u + 1;
+    while (v < units.length && units[v - 1].rest && same(first, units[v]) && (!units[v].rest || units[v].rest.dur === first.rest.dur)) v++;
+    const n = v - u, last = units[v - 1];
+    push(first.from, last.to, {
+      kind: first.piece.kind, name: n > 1 ? text('ol.times', { n, word: name(first.piece) }) : name(first.piece),
+      rest: first.rest ? text('ol.restLine', { rest: dur(first.rest.dur) }) : null, len: dur(first.piece.dur), rate: rate(first.piece),
+    });
+    u = v;
+  }
+  push(end, plan.length, { kind: plan[end].kind, name: name(plan[end]), len: dur(plan[end].dur), rate: rate(plan[end]) });
   return rows;
 }

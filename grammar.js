@@ -120,7 +120,7 @@ export function validatePlan(plan, id, T, L = 'recreational') {
       const prev = main[k - 1];
       if (s.word !== 'recover' || !prev) return;
       const W = WORDS[prev.word];
-      const setBreak = W.set && prev.rep % W.set === 0;
+      const setBreak = !!s.block;
       if (setBreak) {
         if (s.dur < W.setRecover[0] || s.dur > W.setRecover[1]) fail(`set break ${s.dur}s outside ${W.setRecover[0]}-${W.setRecover[1]}s`, firstMain + k);
         return;

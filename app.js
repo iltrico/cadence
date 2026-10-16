@@ -215,15 +215,24 @@ function refresh() { renderPlan(); renderTypes(); renderLength(); persist(); }
 let flippedId = null, flipStage = null, seated = null;
 const cardEl = (id) => document.querySelector(`.type[data-id="${id}"]`);
 
-// The card's back shows the plan as an outline: grouped rows in coach notation.
+// The card's back shows the plan as an outline: one row per run of identical pieces, with
+// the start time, a dotted line for the work and one for its rest, and duration over rate.
 function intervalRows(segs) {
   const type = TYPES.find((ty) => ty.id === state.type);
+  const el = (tag, cls, text) => Object.assign(document.createElement(tag), cls ? { className: cls } : {}, text != null ? { textContent: text } : {});
+  const line = (color, cls, text) => {
+    const l = el('span', 'p-line'), dot = el('span', 'p-dot');
+    dot.style.background = color; l.append(dot, el('span', cls, text)); return l;
+  };
   return outline(segs, type, t, wordName).map((row) => {
-    const li = document.createElement('li');
-    const cell = (cls, text) => Object.assign(document.createElement('span'), { className: cls, textContent: text });
-    const first = segs.slice(row.from, row.to).find((sg) => sg.word !== 'recover') || segs[row.from];
-    const dot = cell('p-dot', ''); dot.style.background = KIND[row.kind === 'rest' ? 'rest' : first.kind].bg;
-    li.append(cell('p-at', fmt(row.start)), dot, cell('p-name', row.label), cell('p-dur', fmt(row.dur)));
+    const li = el('li');
+    const what = el('span', 'p-what');
+    what.append(line(KIND[row.kind].bg, 'p-name', row.name));
+    if (row.rest) what.append(line(KIND.rest.bg, 'p-rest', row.rest));
+    const how = el('span', 'p-how');
+    how.append(el('span', 'p-dur', row.len));
+    if (row.rate) how.append(el('span', 'p-spm', row.rate));
+    li.append(el('span', 'p-at', fmt(row.start)), what, how);
     return li;
   });
 }
