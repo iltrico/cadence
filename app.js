@@ -294,7 +294,10 @@ function openFlip() {
   flipStage = { el: stage, card, inner, front, back, list, h0: r.height };
   flippedId = id;
   inner.style.transform = 'rotateY(180deg)';
-  const h1 = Math.max(r.height, bottom - r.top);
+  // Grow only as much as the plan needs, up to just above the plan bar.
+  const pad = parseFloat(getComputedStyle(list).paddingTop) + parseFloat(getComputedStyle(list).paddingBottom);
+  const needed = head.offsetHeight + [...list.children].reduce((a, li) => a + li.offsetHeight, 0) + pad + 10;
+  const h1 = Math.max(r.height, Math.min(bottom - r.top, Math.ceil(needed)));
   if (reduceMotion()) {
     stage.style.height = `${h1}px`;
     stage.animate([{ opacity: 0 }, { opacity: 1 }], { duration: MOTION.exit });
