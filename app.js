@@ -383,7 +383,7 @@ window.addEventListener('popstate', () => {
   const open = SHEETS.find((id) => !$(id).hidden && !$(id).dataset.closing);
   if (open === 'pausedSheet') setPaused(false);
   else if (open) closeSheet(open);
-  else if (!$('row').hidden) openSheet('endSheet');
+  else if (!$('row').hidden) requestEnd();
   else if (!$('done').hidden) $('again').click();
   syncGuard();
 });
@@ -756,7 +756,7 @@ function finish(completed) {
   cancelAnimationFrame(raf);
   dropWake();
   const rec = sessionRecord(run, completed);
-  if (rec.rowed >= 60) saveSession(rec);
+  if (rec.rowed >= SAVE_AFTER) saveSession(rec);
   closeSheetNow('endSheet');
   closeSheetNow('pausedSheet');
   resetCountdown();
@@ -926,7 +926,31 @@ $('skip').addEventListener('click', () => {
   run.elapsed = Math.max(run.elapsed, nextStart);
   enterSeg(run.idx + 1);
 });
-$('end').addEventListener('click', () => openSheet('endSheet'));
+// Ending in the first 3 minutes discards the session: no confirmation, nothing saved,
+// straight back to setup. Later, End asks first and the session is saved.
+const SAVE_AFTER = 180;
+function requestEnd() {
+  if (run && run.elapsed < SAVE_AFTER) discardRun(); else openSheet('endSheet');
+}
+function discardRun() {
+  cancelAnimationFrame(raf);
+  dropWake();
+  ['endSheet', 'pausedSheet'].forEach(closeSheetNow);
+  resetCountdown();
+  run = null;
+  const row = $('row'), setup = $('setup');
+  setup.hidden = false;
+  refresh(); centreCard(state.type, false); updateCards();
+  if (reduceMotion()) { show('setup'); return; }
+  setup.animate([{ opacity: 0, transform: `translateY(${MOTION.rise}px)` }, { opacity: 1, transform: 'none' }],
+    { duration: MOTION.enter, delay: MOTION.instant, easing: MOTION.out, fill: 'backwards' });
+  row.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: `translateY(${MOTION.rise}px)` }],
+    { duration: MOTION.exit, easing: MOTION.in, fill: 'forwards' }).onfinish = () => {
+    row.getAnimations().forEach((a) => a.cancel());
+    show('setup');
+  };
+}
+$('end').addEventListener('click', requestEnd);
 $('endNo').addEventListener('click', () => closeSheet('endSheet'));
 $('endYes').addEventListener('click', () => finish(false));
 // Leaving the recap: it sinks and fades quickly while setup rises in underneath, with the
