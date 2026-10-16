@@ -5,7 +5,7 @@
 const CACHE = 'cadence-v2';
 const NETWORK_TIMEOUT = 3000;
 const SHELL = [
-  './', './index.html', './styles.css', './app.js', './plan.js', './i18n.js', './storage.js', './manifest.webmanifest',
+  './', './index.html', './styles.css', './app.js', './plan.js', './i18n.js', './storage.js', './outline.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png',
 ];
 

@@ -1,6 +1,7 @@
 import { KIND, TYPES, WORDS, LENGTH, MODULE_TRANSITIONS, moduleOf, buildPlan, fmt, planTotal } from './plan.js';
 import { t, LOCALE, translatePage } from './i18n.js';
 import { loadSettings, saveSettings, loadHistory as readHistory, addSession, removeSession } from './storage.js';
+import { outline } from './outline.js';
 
 // Motion tokens live in styles.css; JS reads the same values so CSS and JS animations match.
 const MOTION = (() => {
@@ -219,14 +220,15 @@ function refresh() { renderPlan(); renderTypes(); renderLength(); persist(); }
 let flippedId = null, flipStage = null, seated = null;
 const cardEl = (id) => document.querySelector(`.type[data-id="${id}"]`);
 
+// The card's back shows the plan as an outline: grouped rows in coach notation.
 function intervalRows(segs) {
-  let at = 0;
-  return segs.map((sg) => {
+  const type = TYPES.find((ty) => ty.id === state.type);
+  return outline(segs, type, t, wordName).map((row) => {
     const li = document.createElement('li');
     const cell = (cls, text) => Object.assign(document.createElement('span'), { className: cls, textContent: text });
-    const dot = cell('p-dot', ''); dot.style.background = KIND[sg.kind].bg;
-    li.append(cell('p-at', fmt(at)), dot, cell('p-name', wordName(sg)), cell('p-spm', `${sg.spm} ${t('spm')}`), cell('p-dur', fmt(sg.dur)));
-    at += sg.dur;
+    const first = segs.slice(row.from, row.to).find((sg) => sg.word !== 'recover') || segs[row.from];
+    const dot = cell('p-dot', ''); dot.style.background = KIND[row.kind === 'rest' ? 'rest' : first.kind].bg;
+    li.append(cell('p-at', fmt(row.start)), dot, cell('p-name', row.label), cell('p-dur', fmt(row.dur)));
     return li;
   });
 }
@@ -290,13 +292,10 @@ function openFlip() {
   setup.append(stage);
   card.style.visibility = 'hidden';
   $('types').classList.add('locked');   // you can't spin the row while holding one of its cards
-  flipStage = { el: stage, card, inner, front, back, list, h0: r.height };
+  flipStage = { el: stage, card, inner, front, back, list, head, h0: r.height, room: bottom - r.top };
   flippedId = id;
   inner.style.transform = 'rotateY(180deg)';
-  // Grow only as much as the plan needs, up to just above the plan bar.
-  const pad = parseFloat(getComputedStyle(list).paddingTop) + parseFloat(getComputedStyle(list).paddingBottom);
-  const needed = head.offsetHeight + [...list.children].reduce((a, li) => a + li.offsetHeight, 0) + pad + 10;
-  const h1 = Math.max(r.height, Math.min(bottom - r.top, Math.ceil(needed)));
+  const h1 = openHeight(head, list, r.height, bottom - r.top);
   if (reduceMotion()) {
     stage.style.height = `${h1}px`;
     stage.animate([{ opacity: 0 }, { opacity: 1 }], { duration: MOTION.exit });
@@ -318,6 +317,26 @@ function openFlip() {
 // card (then) starts at SLIDE_AT, overlapping the end of the turn, and from that point the
 // card follows its slot and fades with the carousel like any other card.
 const SEAT_AT = 0.62, SLIDE_AT = 0.65;
+// The open card grows only as much as its plan needs, up to just above the plan bar.
+function openHeight(head, list, min, room) {
+  const pad = parseFloat(getComputedStyle(list).paddingTop) + parseFloat(getComputedStyle(list).paddingBottom);
+  const needed = head.offsetHeight + [...list.children].reduce((a, li) => a + li.offsetHeight, 0) + pad + 10;
+  return Math.max(min, Math.min(room, Math.ceil(needed)));
+}
+
+// A length change while a card is open: its back shows the new plan and resizes to fit.
+function refreshFlip() {
+  const f = flipStage;
+  if (!f || flippedId !== state.type) return;
+  f.list.replaceChildren(...intervalRows(plan));
+  f.head.querySelector('.b-total').textContent = fmt(planTotal(plan));
+  const from = f.el.offsetHeight, to = openHeight(f.head, f.list, f.h0, f.room);
+  f.el.getAnimations().forEach((a) => a.cancel());
+  f.el.style.height = `${to}px`;
+  if (from !== to && !reduceMotion()) f.el.animate([{ height: `${from}px` }, { height: `${to}px` }], { duration: MOTION.enter, easing: MOTION.out });
+  listEdges(f.list);
+}
+
 function closeFlip(animate = true, then = null) {
   const f = flipStage;
   if (!f) { then?.(); return; }
@@ -355,6 +374,7 @@ const unflipAll = (animate = false) => closeFlip(animate);
 function setValue(v) {
   state.minutes = Math.min(LENGTH.max, Math.max(LENGTH.min, Math.round(v / LENGTH.step) * LENGTH.step));
   renderPlan(true); renderTypes(); renderLength(); persist();
+  refreshFlip();
 }
 
 $('types').addEventListener('click', (e) => {

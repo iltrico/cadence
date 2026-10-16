@@ -6,6 +6,7 @@ import * as storage from './storage.js';
 import { coachCheck } from './coach.js';
 import { PRINCIPLES } from './principles.js';
 import { growth, fmt } from './plan.js';
+import { outline } from './outline.js';
 
 let failures = 0;
 const check = (ok, msg) => { if (!ok) { failures++; console.log(`FAIL ${msg}`); } };
@@ -76,6 +77,33 @@ for (const f of ['app.js', 'plan.js', 'i18n.js', 'storage.js']) {
 }
 imports.add('app.js');
 for (const f of imports) check(shell.includes(f), `${f} is in the offline cache`);
+
+// 3b. The plan outline covers every interval exactly once, in order, with true start times.
+{
+  const text = (k, v) => `${k} ${JSON.stringify(v)}`, name = (sg) => sg.name;
+  let bad = 0;
+  for (const L of LEVELS) for (const t of TYPES) for (let m = 15; m <= 60; m += 5) {
+    const plan = buildPlan(t.id, m * 60, L), rows = outline(plan, t, text, name);
+    let at = 0, next = 0;
+    for (const r of rows) {
+      if (r.from !== next || r.start !== at) bad++;
+      const d = plan.slice(r.from, r.to).reduce((a, sg) => a + sg.dur, 0);
+      if (d !== r.dur) bad++;
+      at += r.dur; next = r.to;
+    }
+    if (next !== plan.length || at !== m * 60) bad++;
+    if (bad) { check(false, `outline of ${t.id} ${m} min (${L}) does not cover the plan`); bad = 0; }
+  }
+}
+
+// 3c. Every language has every string.
+{
+  const src = fs.readFileSync('i18n.js', 'utf8');
+  const block = (l) => { const i = src.indexOf(`  ${l}: {`); return src.slice(i, src.indexOf('\n  },', i)); };
+  const keys = (b) => new Set([...b.matchAll(/(?:'([\w.]+)'|(\b\w+)):\s*['"]/g)].map((x) => x[1] || x[2]));
+  const en = keys(block('en'));
+  for (const l of ['fr', 'it']) { const k = keys(block(l)); for (const key of en) check(k.has(key), `${l} is missing ${key}`); }
+}
 
 // 4. Coach check: outcomes against the principle table (see principles.js).
 const coach = coachCheck(buildPlan);
