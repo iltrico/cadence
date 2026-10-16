@@ -45,12 +45,19 @@ const targetSeconds = () => state.minutes * 60;
 // Program picker: horizontal snap carousel. The card that settles in the centre is the selection.
 function buildTypes() {
   $('types').innerHTML = TYPES.map((ty) => `
-    <button type="button" class="type" role="radio" data-id="${ty.id}"
+    <div class="type" role="radio" tabindex="-1" data-id="${ty.id}"
       style="--cbg:${ty.cover.bg};--cfg:${ty.cover.ink}">
-      <span class="t-top"><span class="t-rate">${rateText(ty.rate)}</span><span class="t-badge" aria-hidden="true">${t('bestFrom', { n: ty.xBelow })}</span></span>
-      <span class="t-name">${typeName(ty.id)}</span>
-      <span class="t-desc">${t(`desc.${ty.id}`)}</span>
-    </button>`).join('');
+      <div class="card-flip">
+        <div class="face front">
+          <span class="t-top"><span class="t-rate">${rateText(ty.rate)}</span><span class="t-badge" aria-hidden="true">${t('bestFrom', { n: ty.xBelow })}</span></span>
+          <span class="t-name">${typeName(ty.id)}</span>
+          <span class="t-desc">${t(`desc.${ty.id}`)}</span>
+          <div class="shade"></div>
+        </div>
+        <div class="face back" aria-hidden="true"><ol class="plan back-list"></ol><div class="shade"></div></div>
+      </div>
+    </div>`).join('');
+  document.querySelectorAll('.back-list').forEach((list) => list.addEventListener('scroll', () => listEdges(list), { passive: true }));
   $('dots').innerHTML = TYPES.map(() => '<span></span>').join('');
 }
 
@@ -86,6 +93,7 @@ function updateCards() {
     c.style.opacity = (1 - 0.55 * d).toFixed(3);
     c.style.setProperty('--shift', `${Math.max(-1, Math.min(1, off)) * 28}px`);
     if (Math.abs(off) < 0.5) pos = j - off;
+    if (c.dataset.id === flippedId && Math.abs(off) > 0.5) setFlip(flippedId, false);
   });
   // Plan bar follows the drag: blend between the two cards either side of centre.
   const p = Math.max(0, Math.min(cards.length - 1, pos));
@@ -116,7 +124,7 @@ function pickCentred() {
     const d = Math.abs(b.offsetLeft + b.offsetWidth / 2 - mid);
     if (d < dist) { dist = d; best = b.dataset.id; }
   });
-  if (best && best !== state.type) { state.type = best; refresh(); }
+  if (best && best !== state.type) { unflipAll(true); state.type = best; refresh(); }
 }
 
 function renderLength() {
@@ -201,17 +209,60 @@ function renderPlan(animate = false) {
   const total = planTotal(plan);
   if (animate && before) tweenBar(before, slotPlans[idx]);
   else drawBar(idx, idx, 0);
-  let at = 0;
-  $('planList').innerHTML = plan.map((s) => {
-    const row = `<li><span class="p-at">${fmt(at)}</span><span class="p-dot" style="background:${KIND[s.kind].bg}"></span>
-      <span class="p-name">${wordName(s)}</span><span class="p-spm">${s.spm} ${t('spm')}</span><span class="p-dur">${fmt(s.dur)}</span></li>`;
-    at += s.dur;
-    return row;
-  }).join('');
+  fillBacks();
   $('start').textContent = t('start', { time: fmt(total) });
 }
 
 function refresh() { renderPlan(); renderTypes(); renderLength(); persist(); }
+
+// ---------- Card backs ----------
+// Each card's back lists its intervals for the chosen length, as a plain table.
+function fillBacks() {
+  document.querySelectorAll('.type').forEach((card, j) => {
+    const list = card.querySelector('.back-list');
+    let at = 0;
+    list.replaceChildren(...(allPlans[j] || []).map((sg) => {
+      const li = document.createElement('li');
+      const cell = (cls, text) => Object.assign(document.createElement('span'), { className: cls, textContent: text });
+      const dot = cell('p-dot', ''); dot.style.background = KIND[sg.kind].bg;
+      li.append(cell('p-at', fmt(at)), dot, cell('p-name', wordName(sg)), cell('p-spm', `${sg.spm} ${t('spm')}`), cell('p-dur', fmt(sg.dur)));
+      at += sg.dur;
+      return li;
+    }));
+    listEdges(list);
+  });
+}
+// Fade an edge of the list only when there is more content beyond it.
+function listEdges(list) {
+  const more = list.scrollHeight - list.clientHeight;
+  list.style.setProperty('--top', list.scrollTop > 2 ? '28px' : '0px');
+  list.style.setProperty('--bottom', more - list.scrollTop > 2 ? '40px' : '0px');
+}
+
+// ---------- Card flip ----------
+let flippedId = null;
+const cardEl = (id) => document.querySelector(`.type[data-id="${id}"]`);
+function setFlip(id, on, animate = true) {
+  const card = cardEl(id);
+  if (!card || card.classList.contains('flipped') === on) return;
+  const inner = card.querySelector('.card-flip');
+  const [front, back] = card.querySelectorAll('.face');
+  card.querySelectorAll('.card-flip, .shade').forEach((el) => el.getAnimations().forEach((a) => a.cancel()));
+  card.classList.toggle('flipped', on);
+  flippedId = on ? id : null;
+  front.setAttribute('aria-hidden', on); back.setAttribute('aria-hidden', !on);
+  if (on) listEdges(back.querySelector('.back-list'));
+  if (!animate) return;
+  if (reduceMotion()) { inner.animate([{ opacity: 0 }, { opacity: 1 }], { duration: MOTION.exit }); return; }
+  const from = on ? 0 : 180, to = on ? 180 : 0, over = on ? 6 : -6;
+  const opt = { duration: MOTION.enter, easing: MOTION.settle };
+  inner.animate([{ transform: `rotateY(${from}deg)` }, { transform: `rotateY(${to + over}deg)`, offset: 0.75 }, { transform: `rotateY(${to}deg)` }], opt);
+  const [leaving, arriving] = on ? [front, back] : [back, front];
+  leaving.querySelector('.shade').animate([{ opacity: 0 }, { opacity: 0.5, offset: 0.45 }, { opacity: 0.5 }], opt);
+  arriving.querySelector('.shade').animate([{ opacity: 0.5 }, { opacity: 0.5, offset: 0.45 }, { opacity: 0 }], opt);
+}
+const toggleFlip = () => setFlip(state.type, flippedId !== state.type);
+const unflipAll = (animate = false) => { if (flippedId) setFlip(flippedId, false, animate); };
 
 function setValue(v) {
   state.minutes = Math.min(LENGTH.max, Math.max(LENGTH.min, Math.round(v / LENGTH.step) * LENGTH.step));
@@ -220,6 +271,11 @@ function setValue(v) {
 
 $('types').addEventListener('click', (e) => {
   const b = e.target.closest('.type'); if (!b) return;
+  if (b.dataset.id === state.type) {
+    if (flippedId === state.type && e.target.closest('.back-list') && b.querySelector('.back-list').scrollHeight > b.querySelector('.back-list').clientHeight) return;
+    toggleFlip(); return;
+  }
+  unflipAll(true);
   state.type = b.dataset.id; refresh(); centreCard(state.type);
 });
 let scrollTimer = 0;
@@ -229,6 +285,7 @@ $('types').addEventListener('scroll', () => {
   scrollTimer = setTimeout(pickCentred, 90);
 }, { passive: true });
 $('types').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFlip(); return; }
   if (!['ArrowRight', 'ArrowLeft'].includes(e.key)) return;
   e.preventDefault();
   const i = TYPES.findIndex((t) => t.id === state.type);
@@ -238,9 +295,7 @@ $('types').addEventListener('keydown', (e) => {
 });
 $('minus').addEventListener('click', () => setValue(state.minutes - LENGTH.step));
 $('plus').addEventListener('click', () => setValue(state.minutes + LENGTH.step));
-$('planBtn').addEventListener('click', () => openSheet('planSheet'));
-$('planClose').addEventListener('click', () => closeSheet('planSheet'));
-$('planSheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeSheet('planSheet'); });
+$('planBtn').addEventListener('click', toggleFlip);
 
 // ---------- Screens ----------
 function show(id, how = {}) {
@@ -265,7 +320,7 @@ function zoomIntoRow(firstBg) {
   row.hidden = false;
   if (reduceMotion() || !card) { setup.hidden = true; return; }
   const r = card.getBoundingClientRect(), W = innerWidth, H = innerHeight;
-  const cover = TYPES.find((ty) => ty.id === state.type).cover.bg;
+  const cover = flippedId === state.type ? '#FFFFFF' : TYPES.find((ty) => ty.id === state.type).cover.bg;
   row.style.transformOrigin = '0 0';
   const zoom = row.animate([
     { transform: `translate(${r.left}px, ${r.top}px) scale(${r.width / W}, ${r.height / H})`, backgroundColor: cover, borderRadius: '48px' },
@@ -287,7 +342,7 @@ function zoomIntoRow(firstBg) {
 
 // Sheets rise with a light spring over a fading backdrop and drop away faster than they came.
 // Plan and History can also be dragged down to close.
-const SHEETS = ['planSheet', 'histSheet', 'pausedSheet', 'endSheet'];
+const SHEETS = ['histSheet', 'pausedSheet', 'endSheet'];
 const scrim = (f = 1) => `color-mix(in srgb, #12131A ${Math.round(55 * f)}%, transparent)`;
 function openSheet(id) {
   const sh = $(id);
@@ -885,7 +940,6 @@ $('historyBtn').addEventListener('click', openHistory);
 $('doneHistory').addEventListener('click', openHistory);
 $('histClose').addEventListener('click', () => closeSheet('histSheet'));
 $('histSheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeSheet('histSheet'); });
-draggable('planSheet');
 draggable('histSheet');
 
 $('start').addEventListener('click', startRun);
@@ -910,7 +964,44 @@ function discardRun() {
   ['endSheet', 'pausedSheet'].forEach(closeSheetNow);
   resetCountdown();
   run = null;
-  returnToSetup('row');
+  zoomOutToCard();
+}
+
+// The reverse of the start: the screen zooms back down into the session card, turning from
+// the interval colour back to the cover colour as the workout fades out, and setup fades
+// back in around it.
+function zoomOutToCard() {
+  const row = $('row'), setup = $('setup');
+  setup.hidden = false;
+  unflipAll();
+  refresh(); centreCard(state.type, false); updateCards();
+  const card = cardEl(state.type);
+  if (reduceMotion() || !card) { show('setup'); return; }
+  const r = card.getBoundingClientRect(), W = innerWidth, H = innerHeight;
+  const cover = TYPES.find((ty) => ty.id === state.type).cover.bg;
+  const fromBg = getComputedStyle(row).backgroundColor;
+  // Setup's own background shows around the shrinking screen from the first frame.
+  const html = document.documentElement;
+  html.style.transition = 'none'; html.style.backgroundColor = '';
+  requestAnimationFrame(() => { html.style.transition = ''; });
+  document.querySelector('meta[name="theme-color"]').content = '#F4F6FB';
+  row.style.transformOrigin = '0 0';
+  const zoom = row.animate([
+    { transform: 'none', backgroundColor: fromBg, borderRadius: '0px' },
+    { transform: `translate(${r.left}px, ${r.top}px) scale(${r.width / W}, ${r.height / H})`, backgroundColor: cover, borderRadius: '48px' },
+  ], { duration: ZOOM_MS, easing: EASE_OUT });
+  [...row.children].forEach((el) => {
+    if (!el.classList.contains('sheet')) el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ZOOM_MS, easing: 'cubic-bezier(0,.55,.45,1)', fill: 'forwards' });
+  });
+  card.animate([{ opacity: 0 }, { opacity: 0, offset: 0.65 }, { opacity: 1 }], { duration: ZOOM_MS });
+  [...setup.children].forEach((el) => {
+    if (el.id !== 'types') el.animate([{ opacity: 0 }, { opacity: 0, offset: 0.5 }, { opacity: 1 }], { duration: ZOOM_MS });
+  });
+  zoom.onfinish = () => {
+    row.getAnimations({ subtree: true }).forEach((a) => a.cancel());
+    row.style.transformOrigin = '';
+    show('setup');
+  };
 }
 $('end').addEventListener('click', requestEnd);
 $('endNo').addEventListener('click', () => closeSheet('endSheet'));
@@ -920,6 +1011,7 @@ $('endYes').addEventListener('click', () => finish(false));
 function returnToSetup(fromId) {
   const from = $(fromId), setup = $('setup');
   setup.hidden = false;
+  unflipAll();
   refresh(); centreCard(state.type, false); updateCards();
   if (reduceMotion() || from.hidden) { show('setup'); return; }
   setup.animate([{ opacity: 0, transform: `translateY(${MOTION.rise}px)` }, { opacity: 1, transform: 'none' }],

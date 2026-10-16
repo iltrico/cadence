@@ -84,18 +84,47 @@ input { user-select: text; -webkit-user-select: text; }
 .type {
   flex: 0 0 var(--card);
   scroll-snap-align: center;
-  display: flex; flex-direction: column; justify-content: flex-end; gap: 0.35rem;
+  position: relative;
   min-height: 0;
-  text-align: left;
-  border: 0;
-  border-radius: 1.75rem;
-  padding: 1.25rem 1.35rem;
-  background: var(--cbg);
-  color: var(--cfg);
+  border-radius: var(--r-card);
+  perspective: 1100px;
+  cursor: pointer;
   will-change: transform, opacity;
   --shift: 0px;
 }
-.type > span { transform: translateX(var(--shift)); }
+.type:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+/* Two-sided card: the front is the session, the back its intervals. */
+.card-flip { position: absolute; inset: 0; transform-style: preserve-3d; }
+.type.flipped .card-flip { transform: rotateY(180deg); }
+.face {
+  position: absolute; inset: 0; box-sizing: border-box; overflow: hidden;
+  border-radius: var(--r-card);
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+}
+.face.front {
+  display: flex; flex-direction: column; justify-content: flex-end; gap: var(--s4);
+  padding: var(--s20) var(--s24) var(--s24);
+  background: var(--cbg); color: var(--cfg); text-align: left;
+}
+.face.front > span { transform: translateX(var(--shift)); }
+.face.back { transform: rotateY(180deg); background: #FFFFFF; color: var(--ink); padding: 5px; box-shadow: inset 0 0 0 5px var(--cbg); }
+/* Each face darkens as it turns away, as if lit from the front. */
+.face .shade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; border-radius: inherit; }
+/* The interval list scrolls without a scrollbar; an edge fades only when there is more beyond it. */
+.plan.back-list {
+  height: 100%; box-sizing: border-box; overflow-y: auto; padding: var(--s8) var(--s12);
+  scrollbar-width: none; overscroll-behavior: contain;
+  --top: 0px; --bottom: 0px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--top), #000 calc(100% - var(--bottom)), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--top), #000 calc(100% - var(--bottom)), transparent 100%);
+}
+.back-list::-webkit-scrollbar { display: none; }
+/* A compact table that fits the card: names wrap only between words. */
+.plan.back-list li { grid-template-columns: 2.5rem 0.55rem minmax(0, 1fr) auto auto; gap: var(--s8); padding: var(--s8) 0; }
+.plan.back-list .p-at, .plan.back-list .p-spm { font-size: 0.8125rem; }
+.plan.back-list .p-name, .plan.back-list .p-dur { font-size: 0.9375rem; }
+.plan.back-list .p-name { overflow-wrap: normal; hyphens: manual; -webkit-hyphens: manual; }
+.plan.back-list .p-dur { min-width: 2.6rem; }
 .type .t-top { display: flex; justify-content: space-between; align-items: center; gap: var(--s8); margin-bottom: auto; }
 .type .t-badge {
   font-size: 0.875rem; font-weight: 600; line-height: 1;
@@ -309,7 +338,7 @@ input { user-select: text; -webkit-user-select: text; }
   display: grid; gap: 0.75rem;
 }
 .sheet-title { margin: 0 0 0.5rem; font-size: 2rem; font-weight: 800; }
-.plan-card { max-height: 78dvh; grid-template-rows: auto minmax(0, 1fr); }
+.plan-card { max-height: 78dvh; grid-template-rows: auto minmax(0, 1fr); }   /* History sheet layout */
 .sheet-head { display: flex; justify-content: space-between; align-items: center; }
 .sheet-head .sheet-title { margin: 0; }
 .x { width: 2.75rem; height: 2.75rem; border-radius: 50%; border: 0; background: #E3E7F0; font-size: 1.5rem; line-height: 1; }
@@ -371,7 +400,7 @@ input { user-select: text; -webkit-user-select: text; }
 }
 
 /* Spacing and radius */
-.type { border-radius: var(--r-card); padding: var(--s20) var(--s24) var(--s24); gap: var(--s4); }
+.type .face.front { padding: var(--s20) var(--s24) var(--s24); gap: var(--s4); }
 .countdown { border-radius: var(--r-card); padding: var(--s24) var(--s24) var(--s32); }
 .sheet-card { border-radius: var(--r-card); padding: var(--s24); gap: var(--s12); }
 .pill { padding: var(--s8) var(--s16); }
