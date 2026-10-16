@@ -4,9 +4,8 @@
 
 const STRINGS = {
   en: {
-    history: 'History', session: 'Session', length: 'Length', setLengthBy: 'Set length by',
-    time: 'Time', distance: 'Distance', shorter: 'Shorter', longer: 'Longer',
-    minutes: 'minutes', meters: 'meters', split: '500m split', showPlan: 'Show plan',
+    history: 'History', session: 'Session', length: 'Length', shorter: 'Shorter', longer: 'Longer',
+    minutes: 'minutes', meters: 'meters', showPlan: 'Show plan',
     start: 'Start {time}', plan: 'Plan', close: 'Close', timeLeft: 'Time left in interval',
     nextUp: 'Next up', totalLeft: 'Total left', elapsed: 'Elapsed', then: 'Next up',
     pause: 'Pause', resume: 'Resume', skip: 'Skip', end: 'End', paused: 'Paused',
@@ -31,9 +30,8 @@ const STRINGS = {
     'type.recovery': 'Recovery', 'desc.recovery': 'Light paddle to flush the legs.',
   },
   fr: {
-    history: 'Historique', session: 'Séance', length: 'Durée', setLengthBy: 'Définir la durée par',
-    time: 'Temps', distance: 'Distance', shorter: 'Plus court', longer: 'Plus long',
-    minutes: 'minutes', meters: 'mètres', split: 'Temps au 500 m', showPlan: 'Voir le programme',
+    history: 'Historique', session: 'Séance', length: 'Durée', shorter: 'Plus court', longer: 'Plus long',
+    minutes: 'minutes', meters: 'mètres', showPlan: 'Voir le programme',
     start: 'Démarrer {time}', plan: 'Programme', close: 'Fermer', timeLeft: "Temps restant dans l'intervalle",
     nextUp: 'À suivre', totalLeft: 'Restant', elapsed: 'Écoulé', then: 'À suivre',
     pause: 'Pause', resume: 'Reprendre', skip: 'Passer', end: 'Terminer', paused: 'En pause',
@@ -58,9 +56,8 @@ const STRINGS = {
     'type.recovery': 'Récupération active', 'desc.recovery': 'Rame légère pour récupérer en douceur.',
   },
   it: {
-    history: 'Cronologia', session: 'Allenamento', length: 'Durata', setLengthBy: 'Imposta la durata per',
-    time: 'Tempo', distance: 'Distanza', shorter: 'Più breve', longer: 'Più lungo',
-    minutes: 'minuti', meters: 'metri', split: 'Passo sui 500 m', showPlan: 'Mostra il piano',
+    history: 'Cronologia', session: 'Allenamento', length: 'Durata', shorter: 'Più breve', longer: 'Più lungo',
+    minutes: 'minuti', meters: 'metri', showPlan: 'Mostra il piano',
     start: 'Inizia {time}', plan: 'Piano', close: 'Chiudi', timeLeft: "Tempo rimasto nell'intervallo",
     nextUp: 'A seguire', totalLeft: 'Rimanente', elapsed: 'Trascorso', then: 'A seguire',
     pause: 'Pausa', resume: 'Riprendi', skip: 'Salta', end: 'Fine', paused: 'In pausa',

@@ -1,5 +1,6 @@
 import { KIND, TYPES, WORDS, MODULE_TRANSITIONS, moduleOf, buildPlan, fmt, planTotal } from './plan.js';
 import { t, LOCALE, translatePage } from './i18n.js';
+import { loadSettings, saveSettings, loadHistory as readHistory, addSession, removeSession } from './storage.js';
 
 // Motion tokens live in styles.css; JS reads the same values so CSS and JS animations match.
 const MOTION = (() => {
@@ -17,6 +18,8 @@ const MOTION = (() => {
   };
 })();
 
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 // Shown names: plans keep English data; the interface translates words and sessions.
 const wordName = (s) => (s.word ? t(`word.${s.word}`) : s.name);
 const typeName = (id) => t(`type.${id}`);
@@ -25,37 +28,18 @@ const rateText = (r) => r.replace('spm', t('spm'));
 const $ = (id) => document.getElementById(id);
 const COUNTDOWN_STROKES = 4;
 
-const LIMITS = {
-  time: { min: 10, max: 120, step: 5, unit: 'minutes' },
-  distance: { min: 2000, max: 30000, step: 500, unit: 'meters' },
-};
+// Session length, in minutes.
+const LENGTH = { min: 10, max: 120, step: 5 };
 
 // ---------- State ----------
-const saved = (() => { try { return JSON.parse(localStorage.getItem('cadence') || '{}'); } catch { return {}; } })();
-const state = {
-  type: saved.type || 'steady',
-  mode: 'time',   // length is always set in minutes
-  minutes: saved.minutes || 30,
-  meters: saved.meters || 6000,
-  split: saved.split || '2:10',
-};
+const state = loadSettings(localStorage);
+if (!TYPES.some((ty) => ty.id === state.type)) state.type = 'steady';
+state.minutes = Math.min(LENGTH.max, Math.max(LENGTH.min, state.minutes));
 let plan = [];
 
-const persist = () => { try { localStorage.setItem('cadence', JSON.stringify(state)); } catch {} };
+const persist = () => saveSettings(localStorage, state);
 
-const parseSplit = (str) => {
-  const m = /^(\d{1,2}):([0-5]\d)$/.exec(String(str).trim());
-  if (!m) return null;
-  const s = +m[1] * 60 + +m[2];
-  return s >= 80 && s <= 300 ? s : null;
-};
-
-const targetSeconds = () => {
-  if (state.mode === 'time') return state.minutes * 60;
-  const split = parseSplit(state.split) ?? 130;
-  // Easier strokes in warm-up, rest and cool-down are slower; ~6% buffer on top of the usual split.
-  return Math.round((state.meters / 500) * split * 1.06 / 60) * 60;
-};
+const targetSeconds = () => state.minutes * 60;
 
 // ---------- Setup screen ----------
 // Program picker: horizontal snap carousel. The card that settles in the centre is the selection.
@@ -136,12 +120,10 @@ function pickCentred() {
 }
 
 function renderLength() {
-  const L = LIMITS[state.mode];
-  const value = state.mode === 'time' ? state.minutes : state.meters;
-  const shown = state.mode === 'time' ? value : value.toLocaleString(LOCALE);
-  $('amount').innerHTML = `${shown}<small>${t(L.unit)}</small>`;
-  $('minus').disabled = value <= L.min;
-  $('plus').disabled = value >= L.max;
+  const amount = $('amount');
+  amount.replaceChildren(String(state.minutes), Object.assign(document.createElement('small'), { textContent: t('minutes') }));
+  $('minus').disabled = state.minutes <= LENGTH.min;
+  $('plus').disabled = state.minutes >= LENGTH.max;
 }
 
 function popEl(el) {
@@ -200,7 +182,7 @@ function resample(slots, N) {
 // Changing the length morphs the bar from the old plan to the new one, like a swipe.
 let barTween = 0;
 function tweenBar(from, to) {
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { drawSlots(to, to, 0); return; }
+  if (reduceMotion()) { drawSlots(to, to, 0); return; }
   const A = resample(from, to.length), t0 = performance.now(), D = MOTION.base;
   cancelAnimationFrame(barTween);
   const step = (now) => {
@@ -232,9 +214,7 @@ function renderPlan(animate = false) {
 function refresh() { renderPlan(); renderTypes(); renderLength(); persist(); }
 
 function setValue(v) {
-  const L = LIMITS[state.mode];
-  v = Math.min(L.max, Math.max(L.min, Math.round(v / L.step) * L.step));
-  if (state.mode === 'time') state.minutes = v; else state.meters = v;
+  state.minutes = Math.min(LENGTH.max, Math.max(LENGTH.min, Math.round(v / LENGTH.step) * LENGTH.step));
   renderPlan(true); renderTypes(); renderLength(); persist();
 }
 
@@ -256,8 +236,8 @@ $('types').addEventListener('keydown', (e) => {
   state.type = TYPES[n].id; refresh(); centreCard(state.type);
   document.querySelector(`.type[data-id="${state.type}"]`).focus({ preventScroll: true });
 });
-$('minus').addEventListener('click', () => setValue((state.mode === 'time' ? state.minutes : state.meters) - LIMITS[state.mode].step));
-$('plus').addEventListener('click', () => setValue((state.mode === 'time' ? state.minutes : state.meters) + LIMITS[state.mode].step));
+$('minus').addEventListener('click', () => setValue(state.minutes - LENGTH.step));
+$('plus').addEventListener('click', () => setValue(state.minutes + LENGTH.step));
 $('planBtn').addEventListener('click', () => openSheet('planSheet'));
 $('planClose').addEventListener('click', () => closeSheet('planSheet'));
 $('planSheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeSheet('planSheet'); });
@@ -274,7 +254,6 @@ function show(id, how = {}) {
 }
 
 // ---------- Screen and sheet transitions ----------
-const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const EASE_OUT = MOTION.out;
 
 // Start: the session card zooms to fill the screen, turning into the first interval's colour.
@@ -423,14 +402,13 @@ function resetCountdown() {
   cd.classList.remove('leaving');
   cd.setAttribute('aria-hidden', 'true');
   ['cdNum', 'cdName', 'cdRate', 'cdUnit'].forEach((id) => { $(id).textContent = ''; });
-  $('cdNum').classList.remove('pop', 'go');
-  $('cdFlash').classList.remove('on');
+  $('cdNum').classList.remove('pop');
   $('cdBar').style.width = '0';
 }
 // Drop one-shot animation classes once they've played. A class left behind would replay
 // its animation the next time the rowing screen is shown.
-['spm', 'segLeft', 'cdNum', 'cdFlash', 'stageName'].forEach((id) => {
-  $(id).addEventListener('animationend', (e) => e.currentTarget.classList.remove('pop', 'go', 'on'));
+['spm', 'segLeft', 'cdNum', 'stageName', 'segName'].forEach((id) => {
+  $(id).addEventListener('animationend', (e) => e.currentTarget.classList.remove('pop'));
 });
 // Once the exit animation has played, drop the class so the panel is fully hidden again.
 $('countdown').addEventListener('animationend', (e) => {
@@ -442,8 +420,8 @@ function startRun() {
   const starts = []; let acc = 0;
   segs.forEach((s) => { starts.push(acc); acc += s.dur; });
   run = { segs, starts, total: acc, elapsed: 0, last: performance.now(), paused: false, phase: 0, idx: -1, txt: {}, cd: false, clockAnim: null, cueSpm: segs[0].spm, pre: null, fuse: null,
-    rowedBy: segs.map(() => 0), startedAt: new Date().toISOString(), type: state.type, mode: state.mode,
-    target: state.mode === 'time' ? `${state.minutes} min` : `${state.meters} m` };
+    rowedBy: segs.map(() => 0), startedAt: new Date().toISOString(), type: state.type,
+    target: `${state.minutes} min` };
   $('ticks').innerHTML = starts.slice(1).map((t) => `<span style="left:${(t / acc) * 100}%"></span>`).join('');
   $('pause').textContent = t('pause');
   resetCountdown();
@@ -470,7 +448,7 @@ function tickRate(to) {
   tickTimers.forEach(clearTimeout); tickTimers = [];
   const from = shownRate;
   shownRate = to;
-  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduce = reduceMotion();
   if (from === null || from === to || reduce) { el.textContent = to; return; }
   el.textContent = from;   // start from the previous rate, never from a blank
   const steps = Math.abs(to - from), dir = Math.sign(to - from), each = TICK_MS / steps;
@@ -483,7 +461,7 @@ function tickRate(to) {
 // Interval clock: count up to the new interval's time in 15-second ticks, then pop.
 // Starts on the switch, as the countdown panel bursts out.
 function startClockTick() {
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (reduceMotion()) return;
   run.clockAnim = { t0: performance.now(), popped: false };
 }
 
@@ -537,10 +515,9 @@ function showSeg(i, how = {}) {
 const FUSE_MS = MOTION.emphasis;
 const TRANSITIONS = { 'stages>rate': fuseToRhythm };
 MODULE_TRANSITIONS.forEach((key) => { if (!TRANSITIONS[key]) console.warn(`No animation for ${key}`); });
-const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 function moduleTransition(from, to, how) {
-  if (reducedMotion()) return;
+  if (reduceMotion()) return;
   const fn = TRANSITIONS[`${from}>${to}`];
   if (fn) fn(how); else swapModules(from, to);
 }
@@ -651,7 +628,7 @@ function tick(now) {
 
   // A designed module transition that needs a lead starts just before the switch catch,
   // so it lands exactly as the next interval's first stroke begins.
-  if (!run.fuse && run.pre == null && !run.paused && i < run.segs.length - 1 && !reducedMotion()) {
+  if (!run.fuse && run.pre == null && !run.paused && i < run.segs.length - 1 && !reduceMotion()) {
     const nxt = run.segs[i + 1];
     if (TRANSITIONS[`${moduleOf(s.word)}>${moduleOf(nxt.word)}`]) {
       const toNext = (1 - run.phase) * (60 / run.cueSpm);
@@ -776,7 +753,7 @@ function playRecap(rec) {
     ['dCount', rec.intervalsDone, (v) => t('of', { a: v, b: rec.intervals }), t('of', { a: rec.intervalsDone, b: rec.intervals })],
     ['dHard', Math.floor(rec.hard / 60), (v) => fmt(v * 60), fmt(rec.hard)],
   ];
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { rows.forEach(([id, , , fin]) => { $(id).textContent = fin; }); return; }
+  if (reduceMotion()) { rows.forEach(([id, , , fin]) => { $(id).textContent = fin; }); return; }
   const { stagger: G, tick: K, lead: L, slide: D } = RECAP;
   const ease = MOTION.settle;
   document.querySelector('.done-title').animate(
@@ -799,8 +776,6 @@ function playRecap(rec) {
 }
 
 // ---------- History ----------
-const HISTORY_KEY = 'cadence-history';
-
 function sessionRecord(r, completed) {
   const segments = r.segs.map((sg, i) => ({
     name: sg.name, kind: sg.kind, spm: sg.spm, planned: sg.dur, rowed: Math.round(r.rowedBy[i]),
@@ -824,16 +799,9 @@ function sessionRecord(r, completed) {
   };
 }
 
-function loadHistory() {
-  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
-}
-function storeHistory(list) {
-  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); return true; } catch { return false; }
-}
+const loadHistory = () => readHistory(localStorage);
 function saveSession(rec) {
-  const list = loadHistory();
-  list.unshift(rec);
-  storeHistory(list);
+  addSession(localStorage, rec);
   // Ask the browser not to evict saved sessions under storage pressure.
   try { navigator.storage?.persist?.(); } catch {}
 }
@@ -847,17 +815,21 @@ function renderHistory() {
   $('histMeta').textContent = list.length
     ? t(list.length === 1 ? 'historyOne' : 'historyMany', { n: list.length, time: fmt(total) })
     : t('noSessions');
-  $('histList').innerHTML = list.map((x) => {
+  // Rows are built as elements, never from HTML strings, so saved text can't become markup.
+  const el = (tag, cls, text) => Object.assign(document.createElement(tag), cls ? { className: cls } : {}, text != null ? { textContent: text } : {});
+  $('histList').replaceChildren(...list.map((x) => {
     const d = new Date(x.startedAt);
-    const color = (TYPES.find((ty) => ty.id === x.type) || TYPES[0]).cover.bg;
-    return `<li>
-      <span class="h-dot" style="background:${color}"></span>
-      <span class="h-main"><span class="h-name">${TYPES.some((ty) => ty.id === x.type) ? typeName(x.type) : x.session}</span>
-        <span class="h-sub">${dayFmt.format(d)}, ${timeFmt.format(d)}${x.completed ? '' : `, ${t('endedEarly')}`}</span></span>
-      <span class="h-dur">${fmt(x.rowed)}</span>
-      <button type="button" class="h-del" data-id="${x.id}" aria-label="${t('deleteSession')}">×</button>
-    </li>`;
-  }).join('');
+    const known = TYPES.find((ty) => ty.id === x.type);
+    const li = el('li');
+    const dot = el('span', 'h-dot'); dot.style.background = (known || TYPES[0]).cover.bg;
+    const main = el('span', 'h-main');
+    main.append(el('span', 'h-name', known ? typeName(x.type) : String(x.session ?? '')),
+      el('span', 'h-sub', `${dayFmt.format(d)}, ${timeFmt.format(d)}${x.completed ? '' : `, ${t('endedEarly')}`}`));
+    const del = el('button', 'h-del', '×');
+    Object.assign(del, { type: 'button' }); del.dataset.id = x.id; del.setAttribute('aria-label', t('deleteSession'));
+    li.append(dot, main, el('span', 'h-dur', fmt(x.rowed)), del);
+    return li;
+  }));
   $('exportCsv').disabled = $('exportJson').disabled = !list.length;
 }
 
@@ -904,7 +876,7 @@ $('histList').addEventListener('click', (e) => {
     setTimeout(() => { if (b.isConnected) { b.dataset.confirm = ''; b.textContent = '×'; b.classList.remove('arm'); } }, 2500);
     return;
   }
-  storeHistory(loadHistory().filter((x) => x.id !== b.dataset.id));
+  removeSession(localStorage, b.dataset.id);
   renderHistory();
 });
 
@@ -938,36 +910,27 @@ function discardRun() {
   ['endSheet', 'pausedSheet'].forEach(closeSheetNow);
   resetCountdown();
   run = null;
-  const row = $('row'), setup = $('setup');
-  setup.hidden = false;
-  refresh(); centreCard(state.type, false); updateCards();
-  if (reduceMotion()) { show('setup'); return; }
-  setup.animate([{ opacity: 0, transform: `translateY(${MOTION.rise}px)` }, { opacity: 1, transform: 'none' }],
-    { duration: MOTION.enter, delay: MOTION.instant, easing: MOTION.out, fill: 'backwards' });
-  row.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: `translateY(${MOTION.rise}px)` }],
-    { duration: MOTION.exit, easing: MOTION.in, fill: 'forwards' }).onfinish = () => {
-    row.getAnimations().forEach((a) => a.cancel());
-    show('setup');
-  };
+  returnToSetup('row');
 }
 $('end').addEventListener('click', requestEnd);
 $('endNo').addEventListener('click', () => closeSheet('endSheet'));
 $('endYes').addEventListener('click', () => finish(false));
-// Leaving the recap: it sinks and fades quickly while setup rises in underneath, with the
-// session you just rowed centred.
-$('again').addEventListener('click', () => {
-  const done = $('done'), setup = $('setup');
+// Back to setup from the recap or a discarded session: the screen sinks and fades quickly
+// while setup rises in underneath, with the session just rowed centred.
+function returnToSetup(fromId) {
+  const from = $(fromId), setup = $('setup');
   setup.hidden = false;
   refresh(); centreCard(state.type, false); updateCards();
-  if (reduceMotion() || done.hidden) { show('setup'); return; }
+  if (reduceMotion() || from.hidden) { show('setup'); return; }
   setup.animate([{ opacity: 0, transform: `translateY(${MOTION.rise}px)` }, { opacity: 1, transform: 'none' }],
     { duration: MOTION.enter, delay: MOTION.instant, easing: MOTION.out, fill: 'backwards' });
-  done.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: `translateY(${MOTION.rise}px)` }],
+  from.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: `translateY(${MOTION.rise}px)` }],
     { duration: MOTION.exit, easing: MOTION.in, fill: 'forwards' }).onfinish = () => {
-    done.getAnimations().forEach((a) => a.cancel());
+    from.getAnimations().forEach((a) => a.cancel());
     show('setup');
   };
-});
+}
+$('again').addEventListener('click', () => returnToSetup('done'));
 
 document.addEventListener('keydown', (e) => {
   if (!run || e.target.matches('input')) return;

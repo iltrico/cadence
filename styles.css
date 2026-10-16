@@ -264,12 +264,6 @@ input { user-select: text; -webkit-user-select: text; }
   0%   { opacity: 1; transform: scale(1); }
   100% { opacity: 0; transform: scale(0.3); }
 }
-.cd-flash {
-  position: absolute; inset: 0; border-radius: inherit;
-  background: var(--nfg); opacity: 0; pointer-events: none;
-}
-.cd-flash.on { animation: flash var(--dur-emphasis) ease-out; }
-@keyframes flash { 0% { opacity: 0.55; } 100% { opacity: 0; } }
 .cd-label { margin: 0; font-weight: 600; opacity: 0.75; }
 .cd-name { margin: 0.2rem 0; font-size: clamp(1.75rem, 8vw, 3rem); font-weight: 800; line-height: 1; }
 .cd-rate { margin: 0; font-weight: 700; font-size: 1.15rem; }
@@ -464,7 +458,7 @@ input { user-select: text; -webkit-user-select: text; }
   .row, .puck, .ticks span, .type .t-badge, .detail > * { transition: none; }
   .stage-name.pop { animation: none; }
   .types { scroll-behavior: auto; }
-  .cd-num.pop, .cd-num.go, .cd-flash.on, .rate span.pop, .seg-left.pop, .stage-name.pop, .mod-in, .mod-out, .seg-name.pop, .puck.pop-in { animation: none; }
+  .cd-num.pop, .rate span.pop, .seg-left.pop, .stage-name.pop, .mod-in, .mod-out, .seg-name.pop, .puck.pop-in { animation: none; }
   .clock { transition: opacity 150ms linear; transform: none !important; }
   .centre.cd .countdown, .countdown.leaving { animation-duration: 1ms; }
 }
