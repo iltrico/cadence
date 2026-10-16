@@ -156,8 +156,6 @@ export function validatePlan(plan, id, T, L = 'recreational') {
     });
   }
 
-  // 11. The "Best up to" flag matches the length.
-  if (!!plan.beyond !== (T > type.bestUpTo * M)) fail('"Best up to" flag does not match the length');
 
   return errors;
 }

@@ -49,7 +49,7 @@ function buildTypes() {
       style="--cbg:${ty.cover.bg};--cfg:${ty.cover.ink}">
       <div class="card-flip">
         <div class="face front">
-          <span class="t-top"><span class="t-rate">${rateText(ty.rate)}</span><span class="t-badge" aria-hidden="true">${t('bestUpTo', { n: ty.bestUpTo })}</span></span>
+          <span class="t-top"><span class="t-rate">${rateText(ty.rate)}</span></span>
           <span class="t-name">${typeName(ty.id)}</span>
           <span class="t-desc">${t(`desc.${ty.id}`)}</span>
           <div class="shade"></div>
@@ -65,12 +65,7 @@ function renderTypes() {
   document.querySelectorAll('.type').forEach((b, j) => {
     b.setAttribute('aria-checked', j === i);
     b.tabIndex = j === i ? 0 : -1;
-    // Past its best length, a session keeps scaling but says it works best shorter.
-    const x = !!(allPlans[j] && allPlans[j].beyond);
-    const hint = t('bestUpTo', { n: TYPES[j].bestUpTo });
-    // The badge always holds its place, so the row never shifts; it only fades in and out.
-    b.querySelector('.t-badge').classList.toggle('on', x);
-    b.setAttribute('aria-label', `${typeName(TYPES[j].id)}${x ? `, ${hint.toLowerCase()}` : ''}`);
+    b.setAttribute('aria-label', typeName(TYPES[j].id));
   });
 }
 

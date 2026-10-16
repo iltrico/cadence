@@ -67,25 +67,24 @@ const hi = (w, L) => { const r = WORDS[w].rate[L]; return Array.isArray(r) ? r[1
 
 // ---------- Sessions ----------
 // Each session is four facts: its words, its shape, its 15-minute form (start) and the
-// piece length it prefers (prefer) before growing by another piece. bestUpTo: past this
-// length the session keeps scaling, getting more demanding, and says so on its card.
+// piece length it prefers (prefer) before growing by another piece.
 export const LENGTH = { min: 15, max: 60, step: 5 };
 export const TYPES = [
-  { id: 'recovery',  kind: 'cool',   name: 'Recovery',      desc: 'Light paddle to flush the legs.',          warm: 'easy',     effort: 1, bestUpTo: 45,
+  { id: 'recovery',  kind: 'cool',   name: 'Recovery',      desc: 'Light paddle to flush the legs.',          warm: 'easy',     effort: 1,
     shape: 'block', word: 'easy' },
-  { id: 'steady',    kind: 'steady', name: 'Steady state',  desc: 'Long, easy aerobic base.',                 warm: 'short',    effort: 1, bestUpTo: 60,
+  { id: 'steady',    kind: 'steady', name: 'Steady state',  desc: 'Long, easy aerobic base.',                 warm: 'short',    effort: 1,
     shape: 'block', word: 'steady' },
-  { id: 'ladder',    kind: 'steady', name: 'Rate ladder',   desc: 'Same pressure, two strokes up each rung.', warm: 'standard', effort: 2, bestUpTo: 60,
+  { id: 'ladder',    kind: 'steady', name: 'Rate ladder',   desc: 'Same pressure, two strokes up each rung.', warm: 'standard', effort: 2,
     shape: 'ladder', word: 'rung', start: 30, prefer: M, most: 15 },                     // unit per share; up to 3 climbs
-  { id: 'tempo',     kind: 'steady', name: 'Tempo',         desc: 'Sustained and comfortably hard.',          warm: 'standard', effort: 2, bestUpTo: 55,
+  { id: 'tempo',     kind: 'steady', name: 'Tempo',         desc: 'Sustained and comfortably hard.',          warm: 'standard', effort: 2,
     shape: 'equal', word: 'tempo', start: [4 * M, 4 * M], prefer: 10 * M, most: 3 },
-  { id: 'threshold', kind: 'work',   name: 'Threshold',     desc: 'Long reps just under race effort.',        warm: 'firm',     effort: 3, bestUpTo: 60,
+  { id: 'threshold', kind: 'work',   name: 'Threshold',     desc: 'Long reps just under race effort.',        warm: 'firm',     effort: 3,
     shape: 'equal', word: 'threshold', start: [3.5 * M, 3.5 * M], prefer: 8 * M, most: 4 },
-  { id: 'pyramid',   kind: 'work',   name: 'Pyramid',       desc: 'Pieces build up, then step down.',         warm: 'firm',     effort: 3, bestUpTo: 45,
+  { id: 'pyramid',   kind: 'work',   name: 'Pyramid',       desc: 'Pieces build up, then step down.',         warm: 'firm',     effort: 3,
     shape: 'pyramid', word: 'threshold', start: M, prefer: M, most: 4, unitMax: 2.5 * M },  // unit per share; up to 4 levels
-  { id: 'power',     kind: 'work',   name: 'Power sprints', desc: 'Short all-out bursts in sets of five.',    warm: 'firm',     effort: 4, bestUpTo: 45,
+  { id: 'power',     kind: 'work',   name: 'Power sprints', desc: 'Short all-out bursts in sets of five.',    warm: 'firm',     effort: 4,
     shape: 'equal', word: 'sprint', start: [20, 20, 20, 20], prefer: 30, most: 30, fixed: true },
-  { id: 'vo2',       kind: 'work',   name: 'Race pace',     desc: 'From 2k to 5k pace as the pieces lengthen.', warm: 'firm',   effort: 4, bestUpTo: 60,
+  { id: 'vo2',       kind: 'work',   name: 'Race pace',     desc: 'From 2k to 5k pace as the pieces lengthen.', warm: 'firm',   effort: 4,
     shape: 'equal', word: 'race', start: [M, M, M], prefer: 2 * M, most: 5 },
 ];
 
@@ -351,7 +350,6 @@ export function buildPlan(id, T, L = 'recreational') {
   coolT += left;
   const warm = warmPhrase(ty.warm, warmT, mainRate, L);
   const segs = [...warm.head, ...warm.tail, ...set, ...coolPhrase(coolT + (warm.spill || 0), L, set[set.length - 1].spm)];
-  segs.beyond = T > ty.bestUpTo * M;
   return segs;
 }
 

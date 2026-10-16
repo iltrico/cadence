@@ -79,7 +79,6 @@ export function coachCheck(buildPlan, level = 'recreational') {
       // P8 Rest character
       const r = byId.P8.threshold[type.id];
       if (r && x.work.length > 1 && (x.restPerWork < r[0] - 1e-9 || x.restPerWork > r[1] + 1e-9)) fail('P8', `rest/work ${x.restPerWork.toFixed(2)} outside ${r[0]}-${r[1]}`);
-      if (plan.beyond) notes.push('beyond "Best up to"');
       rows.push({ type, m, plan, x, notes });
     }
     // P5 Steps (reported; exceptions are explained in the principle table)

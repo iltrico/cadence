@@ -142,15 +142,6 @@ input { user-select: text; -webkit-user-select: text; }
 .plan.back-list .p-name { overflow-wrap: normal; hyphens: manual; -webkit-hyphens: manual; }
 .plan.back-list .p-dur { min-width: 2.6rem; }
 .front .t-top { display: flex; justify-content: space-between; align-items: center; gap: var(--s8); margin-bottom: auto; }
-.front .t-badge {
-  font-size: 0.875rem; font-weight: 600; line-height: 1;
-  padding: 6px 10px; border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--cfg) 14%, transparent);
-  white-space: nowrap;
-  opacity: 0; transform: scale(0.9);
-  transition: opacity var(--dur-quick) var(--ease-out), transform var(--dur-quick) var(--ease-pop);
-}
-.front .t-badge.on { opacity: 1; transform: none; }
 .front .t-name {
   font-size: clamp(2.25rem, 11vw, 3rem);
   font-weight: 800;
@@ -500,7 +491,7 @@ input { user-select: text; -webkit-user-select: text; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .row, .puck, .ticks span, .front .t-badge, .detail > * { transition: none; }
+  .row, .puck, .ticks span, .detail > * { transition: none; }
   .stage-name.pop { animation: none; }
   .types { scroll-behavior: auto; }
   .cd-num.pop, .rate span.pop, .seg-left.pop, .stage-name.pop, .mod-in, .mod-out, .seg-name.pop, .puck.pop-in { animation: none; }
