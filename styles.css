@@ -12,11 +12,30 @@
   /* Spacing and radius tokens (Figma: Spacing collection) */
   --s4: 4px; --s8: 8px; --s12: 12px; --s16: 16px; --s20: 20px; --s24: 24px; --s32: 32px;
   --r-card: 16px; --r-pill: 999px;
+  /* Motion scale: the only raw values. app.js reads these too, so CSS and JS stay in step. */
+  --dur-instant: 120ms;
+  --dur-quick: 220ms;
+  --dur-base: 340ms;
+  --dur-emphasis: 420ms;
+  --stagger: 70ms;        /* gap between items in a cascade */
+  --rise: 12px;           /* distance things travel as they enter or leave */
+  --ease-out: cubic-bezier(.2,.8,.2,1);     /* entering, moving into place */
+  --ease-in: cubic-bezier(.5,0,.75,0);      /* leaving; also content fading in with a move */
+  --ease-settle: cubic-bezier(.25,1,.5,1);  /* arriving with a light overshoot */
+  --ease-pop: cubic-bezier(.2,.9,.3,1.4);   /* the pop */
+  /* Motion roles: what a moment is for. Each points at the scale and adds no value of its own. */
+  --t-enter: var(--dur-base);       /* screens and panels arriving */
+  --t-exit: var(--dur-quick);       /* anything leaving */
+  --t-pop: var(--dur-emphasis);     /* the emphasis pop */
+  --t-sheet: var(--dur-emphasis);   /* a sheet rising */
+  --t-counter: var(--dur-emphasis); /* numbers ticking to a new value */
+  --t-colour: var(--dur-base);      /* background colour changes, in step with the switch */
+
   box-sizing: border-box;
 }
 *, *::before, *::after { box-sizing: inherit; }
 html, body { margin: 0; height: 100%; }
-html { background: var(--paper); transition: background-color 280ms ease-out; }
+html { background: var(--paper); transition: background-color var(--t-colour) ease-out; }
 body {
   font-family: var(--font);
   background: transparent;
@@ -84,7 +103,7 @@ input { user-select: text; -webkit-user-select: text; }
   background: color-mix(in srgb, var(--cfg) 14%, transparent);
   white-space: nowrap;
   opacity: 0; transform: scale(0.9);
-  transition: opacity 180ms ease-out, transform 220ms cubic-bezier(.3,1.4,.5,1);
+  transition: opacity var(--dur-quick) var(--ease-out), transform var(--dur-quick) var(--ease-pop);
 }
 .type .t-badge.on { opacity: 1; transform: none; }
 .type .t-name {
@@ -168,7 +187,7 @@ input { user-select: text; -webkit-user-select: text; }
   grid-template-rows: auto auto auto 1fr auto auto auto;
   grid-template-columns: minmax(0, 1fr);
   gap: 1.25rem;
-  transition: background-color 280ms ease-out, color 280ms ease-out;
+  transition: background-color var(--t-colour) ease-out, color var(--t-colour) ease-out;
   overflow: hidden;
 }
 .row-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
@@ -203,14 +222,14 @@ input { user-select: text; -webkit-user-select: text; }
   border-radius: 50%;
   background: var(--bg);
   border: 0.45rem solid var(--fg);
-  transition: background-color 280ms ease-out;
+  transition: background-color var(--t-colour) ease-out;
 }
 
 .centre { position: relative; display: grid; align-items: center; min-height: 0; }
 .clock, .countdown { grid-area: 1 / 1; }
 .countdown { z-index: 1; }
-.clock { width: 100%; transition: opacity 160ms ease-out, transform 380ms cubic-bezier(.3,1.6,.5,1); }
-.centre.cd .clock { opacity: 0; transform: scale(0.7); transition: opacity 140ms ease-in, transform 180ms ease-in; }
+.clock { width: 100%; transition: opacity var(--dur-quick) var(--ease-out), transform var(--t-pop) var(--ease-pop); }
+.centre.cd .clock { opacity: 0; transform: scale(0.7); transition: opacity var(--dur-instant) var(--ease-in), transform var(--dur-quick) var(--ease-in); }
 .seg-left {
   margin: 0;
   font-size: clamp(6rem, 34vw, 15rem);
@@ -234,8 +253,8 @@ input { user-select: text; -webkit-user-select: text; }
 .countdown { visibility: hidden; }
 .centre.cd .countdown, .countdown.leaving { visibility: visible; }
 /* In: grows from small with a slight overshoot. Out: the same move in reverse. */
-.centre.cd .countdown { pointer-events: auto; animation: cd-in 340ms cubic-bezier(.25,1,.5,1) both; }
-.countdown.leaving { animation: cd-out 340ms cubic-bezier(.5,0,.75,0) both; }
+.centre.cd .countdown { pointer-events: auto; animation: cd-in var(--dur-base) var(--ease-settle) both; }
+.countdown.leaving { animation: cd-out var(--dur-base) var(--ease-in) both; }
 @keyframes cd-in {
   0%   { opacity: 0; transform: scale(0.3); }
   70%  { opacity: 1; transform: scale(1.04); }
@@ -249,7 +268,7 @@ input { user-select: text; -webkit-user-select: text; }
   position: absolute; inset: 0; border-radius: inherit;
   background: var(--nfg); opacity: 0; pointer-events: none;
 }
-.cd-flash.on { animation: flash 420ms ease-out; }
+.cd-flash.on { animation: flash var(--dur-emphasis) ease-out; }
 @keyframes flash { 0% { opacity: 0.55; } 100% { opacity: 0; } }
 .cd-label { margin: 0; font-weight: 600; opacity: 0.75; }
 .cd-name { margin: 0.2rem 0; font-size: clamp(1.75rem, 8vw, 3rem); font-weight: 800; line-height: 1; }
@@ -258,7 +277,7 @@ input { user-select: text; -webkit-user-select: text; }
 .cd-num { display: block; font-size: clamp(6rem, 30vw, 11rem); font-weight: 800; line-height: 0.8; }
 .cd-unit { font-weight: 700; font-size: 1rem; min-height: 1.2em; margin-top: 0.4rem; }
 .cd-num { transform-origin: 70% 60%; }
-.cd-num.pop { animation: rate-pop 420ms cubic-bezier(.2,.9,.3,1.4); }
+.cd-num.pop { animation: rate-pop var(--t-pop) var(--ease-pop); }
 .cd-bar {
   position: absolute; left: 0; bottom: 0; height: 0.5rem; width: 0;
   background: var(--nfg);
@@ -274,7 +293,7 @@ input { user-select: text; -webkit-user-select: text; }
   background: color-mix(in srgb, var(--fg) 18%, transparent);
 }
 .prog-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--fg); }
-.ticks span { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--bg); z-index: 1; transition: background-color 280ms; }
+.ticks span { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--bg); z-index: 1; transition: background-color var(--t-colour); }
 
 .controls { display: flex; gap: 0.75rem; }
 .ctl {
@@ -384,7 +403,7 @@ input { user-select: text; -webkit-user-select: text; }
 /* Rowing: rate sits under the stroke cue, number and unit on one baseline */
 .rate { display: flex; align-items: baseline; gap: var(--s4); text-align: left; line-height: 0.9; }
 .rate span { display: inline-block; transform-origin: 30% 80%; }
-.rate span.pop, .seg-left.pop { animation: rate-pop 420ms cubic-bezier(.2,.9,.3,1.4); }
+.rate span.pop, .seg-left.pop { animation: rate-pop var(--t-pop) var(--ease-pop); }
 .seg-left { transform-origin: 20% 70%; }
 @keyframes rate-pop { 0% { transform: scale(1); } 35% { transform: scale(1.15); } 100% { transform: scale(1); } }
 
@@ -399,8 +418,8 @@ input { user-select: text; -webkit-user-select: text; }
 .detail { align-items: end; }
 #row[data-mode="rate"] .stage-bar, #row[data-mode="rate"] .stage-text,
 #row[data-mode="stages"] .rail, #row[data-mode="stages"] .rate { visibility: hidden; }
-.mod-in  { visibility: visible !important; animation: cd-in 340ms cubic-bezier(.25,1,.5,1) both; }
-.mod-out { visibility: visible !important; animation: cd-out 340ms cubic-bezier(.5,0,.75,0) both; }
+.mod-in  { visibility: visible !important; animation: cd-in var(--dur-base) var(--ease-settle) both; }
+.mod-out { visibility: visible !important; animation: cd-out var(--dur-base) var(--ease-in) both; }
 .stage-bar { position: relative; height: 2.5rem; align-self: center; z-index: 1; }
 .stage-bar span { position: absolute; top: 0; bottom: 0; border-radius: var(--r-pill); overflow: hidden; box-shadow: inset 0 0 0 2px var(--fg); }
 .stage-bar span.bare { box-shadow: none; }
@@ -411,12 +430,12 @@ input { user-select: text; -webkit-user-select: text; }
    flowing into the cursor; the rate and stage name have already swapped in place. */
 #row.fusing .stage-bar { visibility: visible; }
 #row.fusing .rail-fill { visibility: hidden; }
-.seg-name.pop { animation: rate-pop 420ms cubic-bezier(.2,.9,.3,1.4); display: inline-block; transform-origin: 0 70%; }
-.puck.pop-in { animation: puck-in 380ms cubic-bezier(.2,.9,.3,1.4); }
+.seg-name.pop { animation: rate-pop var(--t-pop) var(--ease-pop); display: inline-block; transform-origin: 0 70%; }
+.puck.pop-in { animation: puck-in var(--t-pop) var(--ease-pop); }
 @keyframes puck-in { 0% { transform: scale(0); } 55% { transform: scale(1.2); } 100% { transform: scale(1); } }
 .stage-text { margin: 0; }
 .stage-name { font-size: 2rem; font-weight: 800; line-height: 1; letter-spacing: -0.01em; display: inline-block; transform-origin: 0 70%; }  /* title/l */
-.stage-name.pop { animation: rate-pop 420ms cubic-bezier(.2,.9,.3,1.4); }
+.stage-name.pop { animation: rate-pop var(--t-pop) var(--ease-pop); }
 
 /* Landscape on a rower arm: cue and clock side by side. */
 @media (orientation: landscape) and (max-height: 560px) {
@@ -491,3 +510,7 @@ input { user-select: text; -webkit-user-select: text; }
 .hist-actions .ghost { padding: 1rem 1.4rem; }
 .start:disabled, .ghost:disabled { opacity: 0.35; }
 .done-actions { display: grid; gap: 0.75rem; }
+
+/* Sheet grip: drag down from the top of Plan and History to close them */
+.grip-zone { touch-action: none; cursor: grab; margin: calc(-1 * var(--s12)) 0 0; padding-top: var(--s12); }
+.grip { display: block; width: 40px; height: 5px; border-radius: var(--r-pill); background: var(--line); margin: 0 auto var(--s12); }

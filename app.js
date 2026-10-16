@@ -1,6 +1,22 @@
 import { KIND, TYPES, WORDS, MODULE_TRANSITIONS, moduleOf, buildPlan, fmt, planTotal } from './plan.js';
 import { t, LOCALE, translatePage } from './i18n.js';
 
+// Motion tokens live in styles.css; JS reads the same values so CSS and JS animations match.
+const MOTION = (() => {
+  const cs = getComputedStyle(document.documentElement);
+  const v = (n) => cs.getPropertyValue(n).trim();
+  const ms = (n) => parseFloat(v(n)) || 0;
+  return {
+    // Scale
+    instant: ms('--dur-instant'), quick: ms('--dur-quick'), base: ms('--dur-base'), emphasis: ms('--dur-emphasis'),
+    stagger: ms('--stagger'), rise: ms('--rise'),
+    out: v('--ease-out'), in: v('--ease-in'), settle: v('--ease-settle'), pop: v('--ease-pop'),
+    // Roles
+    enter: ms('--t-enter'), exit: ms('--t-exit'), popDur: ms('--t-pop'), sheet: ms('--t-sheet'),
+    counter: ms('--t-counter'), colour: ms('--t-colour'),
+  };
+})();
+
 // Shown names: plans keep English data; the interface translates words and sessions.
 const wordName = (s) => (s.word ? t(`word.${s.word}`) : s.name);
 const typeName = (id) => t(`type.${id}`);
@@ -130,7 +146,7 @@ function renderLength() {
 
 function popEl(el) {
   el.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.15)', offset: 0.35 }, { transform: 'scale(1)' }],
-    { duration: 420, easing: 'cubic-bezier(.2,.9,.3,1.4)' });
+    { duration: MOTION.popDur, easing: MOTION.pop });
 }
 
 // Plans for every session at the chosen length, so the bar can morph between
@@ -185,7 +201,7 @@ function resample(slots, N) {
 let barTween = 0;
 function tweenBar(from, to) {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) { drawSlots(to, to, 0); return; }
-  const A = resample(from, to.length), t0 = performance.now(), D = 320;
+  const A = resample(from, to.length), t0 = performance.now(), D = MOTION.base;
   cancelAnimationFrame(barTween);
   const step = (now) => {
     const k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3);
@@ -242,18 +258,135 @@ $('types').addEventListener('keydown', (e) => {
 });
 $('minus').addEventListener('click', () => setValue((state.mode === 'time' ? state.minutes : state.meters) - LIMITS[state.mode].step));
 $('plus').addEventListener('click', () => setValue((state.mode === 'time' ? state.minutes : state.meters) + LIMITS[state.mode].step));
-$('planBtn').addEventListener('click', () => { $('planSheet').hidden = false; });
-$('planClose').addEventListener('click', () => { $('planSheet').hidden = true; });
-$('planSheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.hidden = true; });
+$('planBtn').addEventListener('click', () => openSheet('planSheet'));
+$('planClose').addEventListener('click', () => closeSheet('planSheet'));
+$('planSheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeSheet('planSheet'); });
 
 // ---------- Screens ----------
-function show(id) {
-  ['setup', 'row', 'done'].forEach((s) => { $(s).hidden = s !== id; });
+function show(id, how = {}) {
+  if (how.zoom && !$('setup').hidden) { $('done').hidden = true; zoomIntoRow(how.firstBg); }
+  else ['setup', 'row', 'done'].forEach((s) => { $(s).hidden = s !== id; });
   const meta = document.querySelector('meta[name="theme-color"]');
   meta.content = id === 'row' && run ? KIND[run.segs[run.idx]?.kind || 'warm'].bg : '#F4F6FB';
   document.documentElement.style.backgroundColor = id === 'row' && run ? KIND[run.segs[run.idx]?.kind || 'warm'].bg : '';
   window.scrollTo(0, 0);
+  syncGuard();
 }
+
+// ---------- Screen and sheet transitions ----------
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const EASE_OUT = MOTION.out;
+
+// Start: the session card zooms to fill the screen, turning into the first interval's colour.
+// The workout's content rides the zoom, fading in with it (ease-in) so it lands with the card.
+const ZOOM_MS = MOTION.enter;
+function zoomIntoRow(firstBg) {
+  const row = $('row'), setup = $('setup');
+  const card = document.querySelector(`.type[data-id="${state.type}"]`);
+  row.hidden = false;
+  if (reduceMotion() || !card) { setup.hidden = true; return; }
+  const r = card.getBoundingClientRect(), W = innerWidth, H = innerHeight;
+  const cover = TYPES.find((ty) => ty.id === state.type).cover.bg;
+  row.style.transformOrigin = '0 0';
+  const zoom = row.animate([
+    { transform: `translate(${r.left}px, ${r.top}px) scale(${r.width / W}, ${r.height / H})`, backgroundColor: cover, borderRadius: '48px' },
+    { transform: 'none', backgroundColor: firstBg, borderRadius: '0px' },
+  ], { duration: ZOOM_MS, easing: EASE_OUT });
+  [...row.children].forEach((el) => {
+    if (!el.classList.contains('sheet')) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ZOOM_MS, easing: MOTION.in });
+  });
+  card.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ZOOM_MS * 0.35, fill: 'forwards' });
+  [...setup.children].forEach((el) => {
+    if (el.id !== 'types') el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ZOOM_MS * 0.5, fill: 'forwards' });
+  });
+  zoom.onfinish = () => {
+    setup.hidden = true;
+    setup.getAnimations({ subtree: true }).forEach((a) => a.cancel());
+    row.style.transformOrigin = '';
+  };
+}
+
+// Sheets rise with a light spring over a fading backdrop and drop away faster than they came.
+// Plan and History can also be dragged down to close.
+const SHEETS = ['planSheet', 'histSheet', 'pausedSheet', 'endSheet'];
+const scrim = (f = 1) => `color-mix(in srgb, #12131A ${Math.round(55 * f)}%, transparent)`;
+function openSheet(id) {
+  const sh = $(id);
+  if (!sh.hidden && !sh.dataset.closing) return;
+  sh.getAnimations({ subtree: true }).forEach((a) => a.cancel());
+  delete sh.dataset.closing;
+  sh.hidden = false;
+  if (!reduceMotion()) {
+    sh.animate([{ backgroundColor: scrim(0) }, { backgroundColor: scrim(1) }], { duration: MOTION.colour, easing: 'ease-out' });
+    sh.querySelector('.sheet-card').animate([
+      { transform: 'translateY(110%)' }, { transform: 'translateY(-8px)', offset: 0.7 }, { transform: 'translateY(0)' },
+    ], { duration: MOTION.sheet, easing: MOTION.settle });
+  }
+  syncGuard();
+}
+function closeSheet(id, dragged = 0) {
+  const sh = $(id), card = sh.querySelector('.sheet-card');
+  if (sh.hidden || sh.dataset.closing) return;
+  const done = () => {
+    sh.getAnimations({ subtree: true }).forEach((a) => a.cancel());
+    sh.hidden = true; delete sh.dataset.closing; card.style.transform = '';
+    syncGuard();
+  };
+  if (reduceMotion()) { done(); return; }
+  sh.dataset.closing = '1';
+  const f = 1 - dragged / Math.max(1, card.offsetHeight);
+  sh.animate([{ backgroundColor: scrim(f) }, { backgroundColor: scrim(0) }], { duration: MOTION.quick, fill: 'forwards' });
+  card.animate([{ transform: `translateY(${dragged}px)` }, { transform: 'translateY(110%)' }],
+    { duration: MOTION.exit, easing: MOTION.in, fill: 'forwards' }).onfinish = done;
+}
+function closeSheetNow(id) { const sh = $(id); sh.getAnimations({ subtree: true }).forEach((a) => a.cancel()); sh.hidden = true; delete sh.dataset.closing; }
+
+// Drag down from the top of a sheet to close it: past a third of its height, or with a flick.
+function draggable(id) {
+  const sh = $(id), card = sh.querySelector('.sheet-card'), grip = card.querySelector('.grip-zone');
+  let d = null;
+  grip.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button')) return;
+    d = { y: e.clientY, t: performance.now(), h: card.offsetHeight, dy: 0 };
+    grip.setPointerCapture(e.pointerId);
+  });
+  grip.addEventListener('pointermove', (e) => {
+    if (!d) return;
+    d.dy = Math.max(0, e.clientY - d.y);
+    card.style.transform = `translateY(${d.dy}px)`;
+    sh.style.backgroundColor = scrim(1 - d.dy / d.h);
+  });
+  const up = () => {
+    if (!d) return;
+    const { dy, h, t } = d; d = null;
+    sh.style.backgroundColor = '';
+    if (dy > h / 3 || dy / Math.max(1, performance.now() - t) > 0.6) { closeSheet(id, dy); return; }
+    card.style.transform = '';
+    card.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(-4px)', offset: 0.7 }, { transform: 'translateY(0)' }],
+      { duration: MOTION.base, easing: MOTION.settle });
+  };
+  grip.addEventListener('pointerup', up);
+  grip.addEventListener('pointercancel', up);
+}
+
+// The phone's back gesture: it closes a sheet, opens "End this session?" during a session,
+// and returns from the recap to setup. It never leaves the app mid-session.
+let guard = false, ignorePop = false;
+function syncGuard() {
+  const root = $('row').hidden && $('done').hidden && SHEETS.every((id) => $(id).hidden);
+  if (!root && !guard) { history.pushState({ cadence: 1 }, ''); guard = true; }
+  else if (root && guard) { guard = false; ignorePop = true; history.back(); }
+}
+window.addEventListener('popstate', () => {
+  if (ignorePop) { ignorePop = false; return; }
+  guard = false;
+  const open = SHEETS.find((id) => !$(id).hidden && !$(id).dataset.closing);
+  if (open === 'pausedSheet') setPaused(false);
+  else if (open) closeSheet(open);
+  else if (!$('row').hidden) openSheet('endSheet');
+  else if (!$('done').hidden) $('again').click();
+  syncGuard();
+});
 
 // ---------- Keep the screen awake ----------
 // Screen Wake Lock API only. Held from Start until the session ends, pauses included.
@@ -315,7 +448,7 @@ function startRun() {
   $('pause').textContent = t('pause');
   resetCountdown();
   shownRate = null;
-  show('row');
+  show('row', { zoom: true, firstBg: KIND[segs[0].kind].bg });
   holdWake();
   cancelAnimationFrame(raf);
   raf = requestAnimationFrame(tick);
@@ -330,7 +463,7 @@ const idxAt = (t) => {
 // Rate change between intervals: step one stroke at a time, then pop.
 // The pop starts just before the last step so its swell peaks as the final number lands.
 // Short enough that the rate, clock, colour and panel exit all land together.
-const TICK_MS = 500, POP_LEAD_MS = 150;
+const TICK_MS = MOTION.counter, POP_LEAD_MS = MOTION.instant;
 let tickTimers = [], shownRate = null;
 function tickRate(to) {
   const el = $('spm');
@@ -401,7 +534,7 @@ function showSeg(i, how = {}) {
 // ---------- Module transitions ----------
 // Keyed by module, never by word, so any future word using these modules gets them.
 // Pairs without a designed transition fall back to the plain swap.
-const FUSE_MS = 420;
+const FUSE_MS = MOTION.emphasis;
 const TRANSITIONS = { 'stages>rate': fuseToRhythm };
 MODULE_TRANSITIONS.forEach((key) => { if (!TRANSITIONS[key]) console.warn(`No animation for ${key}`); });
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -614,7 +747,7 @@ function setPaused(p) {
   if (!run) return;
   run.paused = p;
   run.last = performance.now();
-  $('pausedSheet').hidden = !p;
+  if (p) openSheet('pausedSheet'); else closeSheet('pausedSheet');
   $('pause').textContent = p ? t('resume') : t('pause');
   if (!p) holdWake();
 }
@@ -624,8 +757,8 @@ function finish(completed) {
   dropWake();
   const rec = sessionRecord(run, completed);
   if (rec.rowed >= 60) saveSession(rec);
-  $('endSheet').hidden = true;
-  $('pausedSheet').hidden = true;
+  closeSheetNow('endSheet');
+  closeSheetNow('pausedSheet');
   resetCountdown();
   run = null;
   show('done');
@@ -634,7 +767,7 @@ function finish(completed) {
 
 // Recap: title pops, then each row slides up and its value ticks up from zero and pops,
 // one row after another; the buttons arrive as the last number lands.
-const RECAP = { stagger: 70, tick: 350, lead: 120, slide: 12 };
+const RECAP = { stagger: MOTION.stagger, tick: MOTION.base, lead: MOTION.instant, slide: MOTION.rise };
 let recapTimers = [];
 function playRecap(rec) {
   recapTimers.forEach(clearTimeout); recapTimers = [];
@@ -645,16 +778,16 @@ function playRecap(rec) {
   ];
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) { rows.forEach(([id, , , fin]) => { $(id).textContent = fin; }); return; }
   const { stagger: G, tick: K, lead: L, slide: D } = RECAP;
-  const ease = 'cubic-bezier(.25,1,.5,1)';
+  const ease = MOTION.settle;
   document.querySelector('.done-title').animate(
     [{ opacity: 0, transform: 'scale(.6)' }, { opacity: 1, transform: 'scale(1.06)', offset: 0.6 }, { opacity: 1, transform: 'scale(1)' }],
-    { duration: 320, easing: ease, fill: 'backwards' });
+    { duration: MOTION.base, easing: ease, fill: 'backwards' });
   const rowEls = document.querySelectorAll('.done-stats > div');
   rows.forEach(([id, n, f, fin], k) => {
     const el = $(id), delay = G * (k + 1);
     el.textContent = f(0);
     rowEls[k].animate([{ opacity: 0, transform: `translateY(${D}px)` }, { opacity: 1, transform: 'none' }],
-      { duration: 200, delay, easing: ease, fill: 'backwards' });
+      { duration: MOTION.quick, delay, easing: ease, fill: 'backwards' });
     recapTimers.push(setTimeout(() => {
       if (!n) { el.textContent = fin; popEl(el); return; }
       for (let q = 1; q <= n; q++) recapTimers.push(setTimeout(() => { el.textContent = q === n ? fin : f(q); }, (q * K) / n));
@@ -662,7 +795,7 @@ function playRecap(rec) {
     }, delay));
   });
   document.querySelector('.done-actions').animate([{ opacity: 0, transform: `translateY(${D / 2}px)` }, { opacity: 1, transform: 'none' }],
-    { duration: 220, delay: G * 3 + K - L, easing: 'ease-out', fill: 'backwards' });
+    { duration: MOTION.quick, delay: G * 3 + K - L, easing: MOTION.out, fill: 'backwards' });
 }
 
 // ---------- History ----------
@@ -775,11 +908,13 @@ $('histList').addEventListener('click', (e) => {
   renderHistory();
 });
 
-const openHistory = () => { renderHistory(); $('histSheet').hidden = false; };
+const openHistory = () => { renderHistory(); openSheet('histSheet'); };
 $('historyBtn').addEventListener('click', openHistory);
 $('doneHistory').addEventListener('click', openHistory);
-$('histClose').addEventListener('click', () => { $('histSheet').hidden = true; });
-$('histSheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.hidden = true; });
+$('histClose').addEventListener('click', () => closeSheet('histSheet'));
+$('histSheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeSheet('histSheet'); });
+draggable('planSheet');
+draggable('histSheet');
 
 $('start').addEventListener('click', startRun);
 $('pause').addEventListener('click', () => setPaused(!run.paused));
@@ -791,10 +926,24 @@ $('skip').addEventListener('click', () => {
   run.elapsed = Math.max(run.elapsed, nextStart);
   enterSeg(run.idx + 1);
 });
-$('end').addEventListener('click', () => { $('endSheet').hidden = false; });
-$('endNo').addEventListener('click', () => { $('endSheet').hidden = true; });
+$('end').addEventListener('click', () => openSheet('endSheet'));
+$('endNo').addEventListener('click', () => closeSheet('endSheet'));
 $('endYes').addEventListener('click', () => finish(false));
-$('again').addEventListener('click', () => { show('setup'); refresh(); centreCard(state.type, false); updateCards(); });
+// Leaving the recap: it sinks and fades quickly while setup rises in underneath, with the
+// session you just rowed centred.
+$('again').addEventListener('click', () => {
+  const done = $('done'), setup = $('setup');
+  setup.hidden = false;
+  refresh(); centreCard(state.type, false); updateCards();
+  if (reduceMotion() || done.hidden) { show('setup'); return; }
+  setup.animate([{ opacity: 0, transform: `translateY(${MOTION.rise}px)` }, { opacity: 1, transform: 'none' }],
+    { duration: MOTION.enter, delay: MOTION.instant, easing: MOTION.out, fill: 'backwards' });
+  done.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: `translateY(${MOTION.rise}px)` }],
+    { duration: MOTION.exit, easing: MOTION.in, fill: 'forwards' }).onfinish = () => {
+    done.getAnimations().forEach((a) => a.cancel());
+    show('setup');
+  };
+});
 
 document.addEventListener('keydown', (e) => {
   if (!run || e.target.matches('input')) return;
