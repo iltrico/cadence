@@ -754,10 +754,30 @@ function stepFuse(now, liveX) {
   return Math.max(0, Math.min(1, (X - F.P / 2) / (F.W - F.P)));
 }
 
-// Drive takes about a third of the stroke at low rates, closer to 40% when racing.
-const driveShare = (spm) => 0.33 + Math.min(1, Math.max(0, (spm - 20) / 12)) * 0.09;
-const ease = (t) => 0.5 - Math.cos(Math.PI * t) / 2;
 const easeOut = (t) => 1 - (1 - t) * (1 - t);
+
+// Stroke cue: the cursor follows the seat. Timings are in seconds, derived from the rate, because
+// a drive takes about a second whatever the rate: slowing down only lengthens the slide.
+//   Drive: 1.05 s at 18 spm, 0.012 s shorter per stroke per minute, never under 0.8 s.
+//   Legs: the first 70% of the drive move the seat; body and arms finish it at the back stop.
+//   Hold: the seat stays at the finish for body and arms, then hands away and body over
+//   (up to 0.45 s of the recovery, never more than a quarter of it).
+//   Slide: the rest of the recovery, back to the catch.
+// Legs and slide share one smooth curve: it starts and ends at rest and is fastest a third of
+// the way, so the cursor turns around smoothly at the catch and leaves the hold gently.
+const seatCurve = (u) => { u = Math.min(1, Math.max(0, u)); return u * u * (6 - 8 * u + 3 * u * u); };
+function strokeTiming(spm) {
+  const T = 60 / spm, drive = Math.max(0.8, Math.min(1.05, 1.05 - (spm - 18) * 0.012));
+  const recovery = T - drive;
+  return { T, drive, legs: 0.7 * drive, hold: Math.min(0.45, 0.25 * recovery), recovery };
+}
+// Seat position for a phase of the stroke: 0 at the catch, 1 at the finish.
+function seatPosition(spm, phase) {
+  const k = strokeTiming(spm), t = phase * k.T;
+  if (t < k.legs) return seatCurve(t / k.legs);
+  if (t < k.drive + k.hold) return 1;
+  return 1 - seatCurve((t - k.drive - k.hold) / (k.recovery - k.hold));
+}
 
 function setText(id, value) {
   if (run.txt[id] !== value) { run.txt[id] = value; $(id).textContent = value; }
@@ -831,9 +851,7 @@ function tick(now) {
   }
 
   // Stroke cue
-  const d = driveShare(run.cueSpm), p = run.phase;
-  const drive = p < d;
-  const x = drive ? easeOut(p / d) : 1 - ease((p - d) / (1 - d));
+  const x = seatPosition(run.cueSpm, run.phase);
   const fx = stepFuse(now, x);
   $('row').style.setProperty('--x', (fx ?? x).toFixed(4));
 
