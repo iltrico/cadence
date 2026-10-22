@@ -6,16 +6,19 @@ import { outline } from './outline.js';
 // Motion tokens live in styles.css; JS reads the same values so CSS and JS animations match.
 const MOTION = (() => {
   const cs = getComputedStyle(document.documentElement);
-  const v = (n) => cs.getPropertyValue(n).trim();
-  const ms = (n) => parseFloat(v(n)) || 0;
+  // Built-in values are a fallback: if the stylesheet ever can't be read, animations keep their
+  // durations instead of collapsing to zero.
+  const v = (n, fb) => cs.getPropertyValue(n).trim() || fb;
+  const ms = (n, fb) => parseFloat(cs.getPropertyValue(n)) || fb;
   return {
     // Scale
-    instant: ms('--dur-instant'), quick: ms('--dur-quick'), base: ms('--dur-base'), emphasis: ms('--dur-emphasis'),
-    stagger: ms('--stagger'), rise: ms('--rise'),
-    out: v('--ease-out'), in: v('--ease-in'), settle: v('--ease-settle'), pop: v('--ease-pop'), turn: v('--ease-turn'),
+    instant: ms('--dur-instant', 120), quick: ms('--dur-quick', 220), base: ms('--dur-base', 340), emphasis: ms('--dur-emphasis', 420),
+    stagger: ms('--stagger', 70), rise: ms('--rise', 12),
+    out: v('--ease-out', 'cubic-bezier(.2,.8,.2,1)'), in: v('--ease-in', 'cubic-bezier(.5,0,.75,0)'), settle: v('--ease-settle', 'cubic-bezier(.25,1,.5,1)'),
+    pop: v('--ease-pop', 'cubic-bezier(.2,.9,.3,1.4)'), turn: v('--ease-turn', 'cubic-bezier(.6,0,.25,1)'),
     // Roles
-    enter: ms('--t-enter'), exit: ms('--t-exit'), popDur: ms('--t-pop'), sheet: ms('--t-sheet'),
-    counter: ms('--t-counter'), colour: ms('--t-colour'), flip: ms('--t-flip'),
+    enter: ms('--t-enter', 340), exit: ms('--t-exit', 220), popDur: ms('--t-pop', 420), sheet: ms('--t-sheet', 420),
+    counter: ms('--t-counter', 420), colour: ms('--t-colour', 340), flip: ms('--t-flip', 560),
   };
 })();
 
@@ -295,7 +298,7 @@ function openFlip() {
   });
   setup.append(stage);
   card.style.visibility = 'hidden';
-  $('types').classList.add('locked');   // you can't spin the row while holding one of its cards
+  $('types').classList.add('locked');   // you can't spin the row while holding one of its cards (see below)
   flipStage = { el: stage, card, inner, front, back, list, head, h0: r.height, room: bottom - r.top };
   flippedId = id;
   inner.style.transform = 'rotateY(180deg)';
@@ -340,6 +343,12 @@ function refreshFlip() {
   if (from !== to && !reduceMotion()) f.el.animate([{ height: `${from}px` }, { height: `${to}px` }], { duration: MOTION.enter, easing: MOTION.out });
   listEdges(f.list);
 }
+
+// While a card is open, swipes on the row are blocked. Scrolling stays on: switching it off
+// and back on can leave Safari's snapping row frozen.
+['touchmove', 'wheel'].forEach((ev) => $('types').addEventListener(ev, (e) => {
+  if ($('types').classList.contains('locked')) e.preventDefault();
+}, { passive: false }));
 
 function closeFlip(animate = true, then = null) {
   const f = flipStage;
@@ -602,10 +611,12 @@ function startRun() {
   $('pause').textContent = t('pause');
   resetCountdown();
   shownRate = null;
-  show('row', { zoom: true, firstBg: KIND[segs[0].kind].bg });
-  holdWake();
+  // The engine starts first, so the session runs even if the transition into it fails.
   cancelAnimationFrame(raf);
   raf = requestAnimationFrame(tick);
+  holdWake();
+  try { show('row', { zoom: true, firstBg: KIND[segs[0].kind].bg }); }
+  catch (e) { window.cadenceError?.(e); ['setup', 'done'].forEach((id) => { $(id).hidden = true; }); $('row').hidden = false; }
 }
 
 const idxAt = (t) => {
@@ -783,7 +794,19 @@ function setText(id, value) {
   if (run.txt[id] !== value) { run.txt[id] = value; $(id).textContent = value; }
 }
 
+// The frame loop: one bad frame is reported, and the loop carries on instead of stopping.
 function tick(now) {
+  try { frame(now); }
+  catch (e) {
+    if (!run) return;
+    if (!run.errored) { run.errored = true; window.cadenceError?.(e); }
+    run.last = now;
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(tick);
+  }
+}
+
+function frame(now) {
   const dt = Math.min(5, (now - run.last) / 1000);
   // If the tab was frozen, catch the clock up with wall time but keep the stroke cue smooth.
   const wall = (now - run.last) / 1000;

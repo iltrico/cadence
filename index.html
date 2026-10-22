@@ -15,6 +15,34 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,300..800&display=swap">
   <link rel="stylesheet" href="./styles.css">
+<script>
+  // Error banner: any unexpected error shows on screen with where it happened, so problems can be
+  // reported from an installed app, which has no address bar or console. Classic script, so it runs
+  // before the app's modules and also catches errors while they load.
+  (() => {
+    const seen = new Set();
+    const report = (msg) => {
+      if (!msg || seen.has(msg) || seen.size > 4) return;
+      seen.add(msg);
+      let box = document.getElementById('errBox');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'errBox'; box.setAttribute('role', 'alert');
+        const text = document.createElement('p'), ok = document.createElement('button');
+        ok.type = 'button'; ok.textContent = 'OK'; ok.onclick = () => box.remove();
+        box.append(text, ok);
+        (document.body || document.documentElement).append(box);
+      }
+      const text = box.querySelector('p');
+      text.textContent = (text.textContent ? `${text.textContent}\n` : '') + msg;
+    };
+    // Where it happened: the first frames of the stack (Chrome's stack repeats the message first; Safari's doesn't).
+    const where = (e) => (e && e.stack ? e.stack.split('\n').map((l) => l.trim()).filter((l) => /^at |@/.test(l)).slice(0, 3).join(' | ') : '');
+    window.cadenceError = (e) => report(`${e && e.message ? e.message : e} ${where(e)}`.trim());
+    addEventListener('error', (e) => report(e.error ? `${e.error.message} ${where(e.error)}` : `${e.message} (${(e.filename || '').split('/').pop()}:${e.lineno}:${e.colno})`));
+    addEventListener('unhandledrejection', (e) => report(`Promise: ${e.reason && e.reason.message ? e.reason.message : e.reason}`));
+  })();
+</script>
 </head>
 <body>
 

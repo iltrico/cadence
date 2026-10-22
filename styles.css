@@ -83,7 +83,9 @@ input { user-select: text; -webkit-user-select: text; }
 }
 .types::-webkit-scrollbar { display: none; }
 /* While a card is open, the row can't be swiped. */
-.types.locked { overflow-x: hidden; touch-action: none; }
+/* While a card is open, swipes on the row are blocked in app.js. Scrolling itself stays on:
+   Safari can leave a snapping row frozen after its overflow is switched off and back on. */
+.types.locked { }
 /* Spacers sized so the first and last cards can scroll to the exact centre */
 .types::before, .types::after { content: ''; flex: 0 0 calc(50% - var(--card) / 2 - 0.75rem); }
 .type {
@@ -554,3 +556,10 @@ input { user-select: text; -webkit-user-select: text; }
 .grip { display: block; width: 72px; height: 44px; margin: calc(-1 * var(--s16)) auto 0; padding: 0; border: 0; background: none; cursor: grab; position: relative; }
 .grip::before { content: ''; position: absolute; left: 16px; right: 16px; top: 50%; height: 5px; margin-top: -2.5px; border-radius: var(--r-pill); background: var(--line); }
 .grip:focus-visible { outline: 3px solid var(--ink); outline-offset: -6px; border-radius: var(--r-pill); }
+
+/* Error banner (see index.html): fixed at the bottom, above everything, easy to screenshot. */
+#errBox { position: fixed; z-index: 1000; left: var(--s12); right: var(--s12); bottom: calc(var(--s12) + env(safe-area-inset-bottom, 0px));
+  display: flex; gap: var(--s12); align-items: flex-start; padding: var(--s12) var(--s16); border-radius: var(--r-card);
+  background: #12131A; color: #fff; font: 500 0.8125rem/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+#errBox p { margin: 0; flex: 1; white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow: auto; }
+#errBox button { font: 700 0.875rem/1 var(--font); color: #12131A; background: #fff; border: 0; border-radius: var(--r-pill); padding: 0.5rem 0.9rem; }
